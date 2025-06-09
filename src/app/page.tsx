@@ -31,6 +31,7 @@ export default function HomePage() {
   const [links, setLinks] = useState<LinkData[]>(initialLinks);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isMounted, setIsMounted] = useState(false);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -46,8 +47,9 @@ export default function HomePage() {
     const storedTheme = localStorage.getItem(LOCAL_STORAGE_KEY_THEME) as 'light' | 'dark' | null;
     if (storedTheme) {
       setTheme(storedTheme);
-      document.documentElement.classList.toggle('dark', storedTheme === 'dark');
+      // Removed direct DOM manipulation: document.documentElement.classList.toggle('dark', storedTheme === 'dark');
     }
+    setCurrentYear(new Date().getFullYear());
     setIsMounted(true);
   }, []);
 
@@ -141,7 +143,7 @@ export default function HomePage() {
       </main>
       
       <footer className="py-6 text-center text-sm text-muted-foreground border-t">
-        © {new Date().getFullYear()} {APP_NAME}. Create your own social landing page.
+        {currentYear ? `© ${currentYear} ${APP_NAME}. Create your own social landing page.` : `${APP_NAME}. Create your own social landing page.`}
       </footer>
     </div>
   );
