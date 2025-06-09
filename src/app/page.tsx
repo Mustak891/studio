@@ -88,7 +88,7 @@ export default function HomePage() {
 
   useEffect(() => {
     console.log(`[HomePage-UserDataEffect-ENTRY] User: ${user ? user.uid : 'null'}, AuthLoading: ${authLoading}, AuthIsDeleting: ${authIsDeleting}, IsMounted: ${isMounted}, DB: ${!!db}`);
-
+    
     if (authIsDeleting || authLoading) {
       console.log(`[HomePage-UserDataEffect-BUSY_STATE]: Auth is deleting (authIsDeleting: ${authIsDeleting}) OR Auth is loading (authLoading: ${authLoading}). Halting data load/create.`);
       if (authIsDeleting && !authLoading && !user) {
@@ -140,15 +140,17 @@ export default function HomePage() {
           const creationTime = user.metadata.creationTime;
           const lastSignInTime = user.metadata.lastSignInTime;
           console.log(`[HomePage-UserDataEffect-LOAD]: User Metadata: creationTime: ${creationTime}, lastSignInTime: ${lastSignInTime}`);
-
+          
           const creationTimeMs = creationTime ? new Date(creationTime).getTime() : 0;
           const lastSignInTimeMs = lastSignInTime ? new Date(lastSignInTime).getTime() : 0;
 
+          // A user is considered "new" if their creation time and last sign-in time are very close (e.g., within 5 seconds).
+          // This helps prevent re-creating a profile if a user's document was deleted but their auth session metadata is old.
           const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; // 5 second threshold
           console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs}, threshold: 5000ms)`);
 
           if (isLikelyNewUser) {
-            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid, ") appears to be NEW. Generating and saving initial profile to Firestore.");
+            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid, ") appears to be NEW based on timestamps. Generating and saving initial profile to Firestore.");
             const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
             setProfileData(newProfile);
             setLinks(initialLinks);
@@ -156,7 +158,7 @@ export default function HomePage() {
             console.log("[HomePage-UserDataEffect-LOAD]: Initial profile for new user (UID:", user.uid, ") SAVED to Firestore.");
             toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up." });
           } else {
-            console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new. Resetting local editor state using auth details WITHOUT saving to Firestore.");
+            console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new based on timestamps. Resetting local editor state using auth details WITHOUT saving to Firestore.");
             setProfileData(generateInitialProfileData(user.displayName, user.photoURL));
             setLinks(initialLinks);
           }
@@ -178,9 +180,9 @@ export default function HomePage() {
       toast({ title: "Save Error", description: "Cannot save. User not signed in or database unavailable.", variant: "destructive" });
       return;
     }
-    if (authIsDeleting) {
-      console.warn("[SaveData]: Aborted. Account deletion in progress.");
-      toast({ title: "Save Error", description: "Cannot save while account deletion is in progress.", variant: "destructive" });
+    if (authIsDeleting || authLoading) { // Check authLoading as well
+      console.warn("[SaveData]: Aborted. Account deletion or auth loading in progress.");
+      toast({ title: "Save Error", description: "Cannot save while account deletion or authentication is in progress.", variant: "destructive" });
       return;
     }
 
@@ -216,7 +218,7 @@ export default function HomePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, db, toast, isMounted, authIsDeleting]);
+  }, [user, db, toast, isMounted, authIsDeleting, authLoading]); // Added authLoading
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -287,11 +289,10 @@ export default function HomePage() {
       return;
     }
     console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
-    // Close the dropdown menu before starting deletion if it's open.
-    // This is handled by the AlertDialogTrigger being outside the Dropdown.
     await deleteUserAccount();
   };
 
+  // This handles the initial "app is loading" state before isMounted or auth state is known
   if (!isMounted || (authLoading && !user && !authIsDeleting)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
@@ -323,7 +324,7 @@ export default function HomePage() {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between max-w-screen-2xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-bold text-primary font-headline">{APP_NAME}</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Toggle theme" disabled={authIsDeleting || authLoading}>
               {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
@@ -360,13 +361,11 @@ export default function HomePage() {
                         Sign Out
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                       {/* AlertDialogTrigger must be a direct child of AlertDialog for it to work correctly */}
-                       {/* We wrap the DropdownMenuItem with AlertDialogTrigger */}
                       <AlertDialogTrigger asChild>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive focus:bg-destructive/10"
                           disabled={authIsDeleting || authLoading}
-                          onSelect={(e) => e.preventDefault()} // Prevent dropdown from closing
+                          onSelect={(e) => e.preventDefault()} 
                         >
                           <Trash2 className={`mr-2 h-4 w-4 ${authIsDeleting ? 'animate-spin' : ''}`} />
                           {authIsDeleting ? 'Deleting...' : 'Delete Account'}
@@ -374,7 +373,6 @@ export default function HomePage() {
                       </AlertDialogTrigger>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  {/* AlertDialogContent is separate and triggered by the item above */}
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -401,46 +399,48 @@ export default function HomePage() {
         </div>
       </header>
 
-      {!user ? (
+      {!user && !authLoading ? ( // Ensure auth is not loading before showing sign-in prompt
         <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center text-center">
           <h2 className="text-3xl font-bold text-foreground mb-4">Welcome to {APP_NAME}!</h2>
           <p className="text-muted-foreground mb-8 text-lg">Sign in to create and manage your personalized link page.</p>
-          <Button size="lg" onClick={signInWithGoogle} disabled={authIsDeleting || authLoading}>
+          <Button size="lg" onClick={signInWithGoogle} disabled={authIsDeleting || authLoading}> {/* authLoading check is redundant if already handled above but safe */}
             <LogIn className="mr-2 h-5 w-5" /> Sign in with Google
           </Button>
         </main>
       ) : (
-        <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 max-w-screen-2xl">
-          {firestoreError && (
-            <div className="mb-4 p-4 border border-destructive/50 bg-destructive/10 text-destructive rounded-md flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              <p><strong>Storage Error:</strong> {firestoreError} Ensure Firebase Firestore is enabled and security rules are correctly configured. See console for details.</p>
+        user && ( // Only render editor content if user exists
+          <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 max-w-screen-2xl">
+            {firestoreError && (
+              <div className="mb-4 p-4 border border-destructive/50 bg-destructive/10 text-destructive rounded-md flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                <p><strong>Storage Error:</strong> {firestoreError} Ensure Firebase Firestore is enabled and security rules are correctly configured. See console for details.</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+              <Tabs defaultValue="profile" className="lg:col-span-2">
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                  <TabsTrigger value="profile">
+                    <UserCog className="mr-2 h-5 w-5" />
+                    Profile Settings
+                  </TabsTrigger>
+                  <TabsTrigger value="links">
+                    <Link2 className="mr-2 h-5 w-5" />
+                    Manage Links
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="profile">
+                  <ProfileEditor profileData={profileData} onProfileChange={setProfileData} />
+                </TabsContent>
+                <TabsContent value="links">
+                  <LinkListEditor links={links} onLinksChange={setLinks} />
+                </TabsContent>
+              </Tabs>
+              <div className="lg:col-span-1 lg:sticky lg:top-24 self-start max-h-[calc(100vh-8rem)]">
+                <LivePreview profileData={profileData} links={links} showTitle={true} />
+              </div>
             </div>
-          )}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-            <Tabs defaultValue="profile" className="lg:col-span-2">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="profile">
-                  <UserCog className="mr-2 h-5 w-5" />
-                  Profile Settings
-                </TabsTrigger>
-                <TabsTrigger value="links">
-                  <Link2 className="mr-2 h-5 w-5" />
-                  Manage Links
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="profile">
-                <ProfileEditor profileData={profileData} onProfileChange={setProfileData} />
-              </TabsContent>
-              <TabsContent value="links">
-                <LinkListEditor links={links} onLinksChange={setLinks} />
-              </TabsContent>
-            </Tabs>
-            <div className="lg:col-span-1 lg:sticky lg:top-24 self-start max-h-[calc(100vh-8rem)]">
-              <LivePreview profileData={profileData} links={links} showTitle={true} />
-            </div>
-          </div>
-        </main>
+          </main>
+        )
       )}
 
       <footer className="py-6 text-center text-sm text-muted-foreground border-t">
