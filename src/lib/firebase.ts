@@ -1,6 +1,6 @@
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 
 // For debugging: Log if environment variables are loaded (client-side only)
 if (typeof window !== 'undefined') {
@@ -24,35 +24,44 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app;
+let app: FirebaseApp | undefined;
+let auth: Auth | null = null;
+const googleProvider = new GoogleAuthProvider();
 
 if (!firebaseConfig.apiKey) {
   console.error(
-    'Firebase Error: API Key is missing. Please check your .env.local file and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set and that you have restarted your development server.'
+    'Firebase Critical Error: NEXT_PUBLIC_FIREBASE_API_KEY is missing or empty in your .env.local file. Firebase cannot be initialized. Please add it and restart your development server.'
   );
-  // Prevent Firebase initialization if API key is definitely missing
-  // You might want to throw an error here or handle it more gracefully depending on your app's needs
-}
-
-if (!getApps().length) {
-  if (firebaseConfig.apiKey) { // Only initialize if API key is present
-    app = initializeApp(firebaseConfig);
-  } else {
-    // App will not be initialized, auth will likely fail later
-    // This state should be handled, perhaps by showing an error message to the user
-    console.error("Firebase app initialization skipped due to missing API key.");
-  }
 } else {
-  app = getApp();
+  if (!getApps().length) {
+    try {
+      app = initializeApp(firebaseConfig);
+    } catch (e) {
+      console.error("Firebase Error: Failed to initialize Firebase app. This could be due to invalid configuration values even if the API key is present.", e);
+    }
+  } else {
+    app = getApp();
+  }
+
+  if (app) {
+    try {
+      auth = getAuth(app);
+    } catch (e) {
+       console.error("Firebase Error: Failed to get Auth instance. This may occur if the app was initialized with an invalid API key or configuration.", e);
+    }
+  }
 }
 
-// Get Auth instance only if app was initialized
-const auth = app ? getAuth(app) : null; // Make auth potentially null if app isn't initialized
-const googleProvider = new GoogleAuthProvider();
-
-// If auth is null, functions in AuthContext might fail. This needs to be handled.
 if (!auth) {
-    console.error("Firebase Auth could not be initialized because the Firebase app failed to initialize (likely due to a missing API key).");
+    console.error(
+      "Firebase Auth could not be initialized. This often means the Firebase app itself failed to initialize or auth could not be obtained. Common reasons include: \n" +
+      "1. A missing or empty NEXT_PUBLIC_FIREBASE_API_KEY in your .env.local file.\n" +
+      "2. An incorrect or invalid API key value in NEXT_PUBLIC_FIREBASE_API_KEY.\n" +
+      "3. Other missing or incorrect Firebase configuration values (authDomain, projectId, etc.) in .env.local.\n" +
+      "4. Your Firebase project settings might not authorize this app's domain (check 'Authorized domains' in Firebase Authentication settings).\n" +
+      "5. Google Sign-In (or other providers) may not be enabled in your Firebase project.\n" +
+      "Please double-check your .env.local file and your Firebase project console settings, then restart your development server."
+    );
 }
 
 export { app, auth, googleProvider };
