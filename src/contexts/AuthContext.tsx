@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log("[AuthContext]: onAuthStateChanged triggered. New user state:", currentUser ? currentUser.uid : null);
+      console.log("[AuthContext]: onAuthStateChanged triggered. New user state:", currentUser ? currentUser.uid : "null");
       setUser(currentUser);
       setLoading(false);
     });
@@ -136,6 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await firebaseSignOut(auth);
       console.log("[AuthContext]: firebaseSignOut successful. onAuthStateChanged will handle UI updates.");
       toast({ title: "Signed Out", description: "Successfully signed out." });
+      // onAuthStateChanged will set user to null and setLoading(false)
     } catch (error) {
       console.error("[AuthContext]: Error signing out: ", error);
       const authError = error as AuthError;
@@ -148,65 +149,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log("[AuthContext]: deleteUserAccount initiated.");
     if (!auth || !auth.currentUser || !db) {
       toast({ title: "Error", description: "Cannot delete account. Essential services (Auth/DB) are not available or user not signed in.", variant: "destructive" });
-      setLoading(false);
+      setLoading(false); // Ensure loading is false if prerequisites are not met
       return;
     }
 
-    const currentUserBeingDeleted = auth.currentUser; 
-    const userUidToDelete = currentUserBeingDeleted.uid;
-    console.log("[AuthContext]: Attempting to delete account for UID:", userUidToDelete);
+    const currentUserForDeletion = auth.currentUser; // Capture user instance at the start
+    const userUidToDelete = currentUserForDeletion.uid;
+    console.log(`[AuthContext]: Preparing to delete account for UID: ${userUidToDelete}`);
 
     setLoading(true);
 
+    // --- Try to delete Firestore Data ---
     try {
-      // Step 1: Delete Firestore data
-      console.log("[AuthContext]: Step 1 - Attempting to delete Firestore data for UID:", userUidToDelete);
       const userDocRef = doc(db, "users", userUidToDelete);
+      console.log(`[AuthContext]: Attempting to delete Firestore doc: users/${userUidToDelete}`);
       await deleteDoc(userDocRef);
-      console.log("[AuthContext]: Step 1 - Firestore data successfully deleted for UID:", userUidToDelete);
+      console.log(`[AuthContext]: Firestore doc users/${userUidToDelete} DELETED successfully (or did not exist).`);
+      toast({ title: "Data Deleted", description: "Your profile data has been removed from our database."});
 
-      // Step 2: If Firestore data deletion was successful, attempt to delete Firebase Auth user
+      // --- If Firestore Data Deletion Successful, Try to delete Auth User ---
       try {
-        console.log("[AuthContext]: Step 2 - Attempting to delete Firebase Auth user for UID:", userUidToDelete);
-        await firebaseDeleteUser(currentUserBeingDeleted); 
-        console.log("[AuthContext]: Step 2 - Firebase Auth user successfully deleted for UID:", userUidToDelete);
-        toast({ title: "Account Deleted", description: "Your account and all associated data have been successfully deleted." });
-        // onAuthStateChanged will handle setUser(null) and setLoading(false) as the user state changes to null.
-        // No explicit signOutUser() needed here, as firebaseDeleteUser() triggers onAuthStateChanged.
+        console.log(`[AuthContext]: Attempting to delete Firebase Auth user: ${userUidToDelete}`);
+        await firebaseDeleteUser(currentUserForDeletion); // Use the captured currentUser
+        console.log(`[AuthContext]: Firebase Auth user ${userUidToDelete} DELETED successfully.`);
+        toast({ title: "Account Fully Deleted", description: "Your account and all associated data have been successfully deleted." });
+        // onAuthStateChanged will be triggered by firebaseDeleteUser, which will set user to null and setLoading(false).
       } catch (authDeletionError: any) {
-        console.error("[AuthContext]: Step 2 - Error deleting Firebase Auth user for UID:", userUidToDelete, authDeletionError);
+        console.error(`[AuthContext]: FAILED to delete Firebase Auth user ${userUidToDelete}. Error:`, authDeletionError);
         const authError = authDeletionError as AuthError;
-        let errorMessage = `Your data was successfully deleted, but we failed to delete your authentication account. Error: ${authError.message}.`;
-        
+        let authErrorMessage = `Your data was deleted, but deleting your authentication account failed: ${authError.message}. You have been signed out.`;
         if (authError.code === 'auth/requires-recent-login') {
-          errorMessage = "Your data was deleted, but your authentication account requires re-login to be fully removed. You have been signed out. Please sign back in and try deleting your account again to fully remove it.";
-        } else {
-           errorMessage = `Your data was deleted, but deleting your authentication account failed: ${authError.message}. You have been signed out.`;
+            authErrorMessage = "Your data was deleted, but your authentication account requires re-login to be fully removed. You have been signed out. Please sign back in and try deleting your account again to fully remove it.";
         }
+        toast({ title: "Authentication Deletion Failed", description: authErrorMessage, variant: "destructive", duration: 15000 });
         
-        toast({
-          title: "Account Deletion Incomplete",
-          description: errorMessage,
-          variant: "destructive",
-          duration: 15000,
-        });
-        
-        console.log("[AuthContext]: Firebase Auth deletion failed for UID:", userUidToDelete, "Signing out user locally.");
-        await signOutUser(); // Ensures client state is updated and user is logged out.
-                             // This will trigger onAuthStateChanged, setting user to null and loading to false.
+        console.log(`[AuthContext]: Signing out user ${userUidToDelete} due to Firebase Auth deletion failure after successful data deletion.`);
+        await signOutUser(); // Sign out to clear client state. This will trigger onAuthStateChanged.
       }
 
     } catch (firestoreError: any) {
-      console.error("[AuthContext]: Step 1 - Error deleting user data from Firestore for UID:", userUidToDelete, firestoreError);
+      console.error(`[AuthContext]: FAILED to delete Firestore doc users/${userUidToDelete}. Error:`, firestoreError);
       toast({
-        title: "Data Deletion Failed",
-        description: `Could not delete your data from the database. Your account has NOT been deleted. Error: ${firestoreError.message}. Please check Firestore rules or network connectivity.`,
-        variant: "destructive",
-        duration: 10000,
+          title: "Database Error During Deletion",
+          description: `Failed to delete your profile data. Your account was NOT deleted. Error: ${firestoreError.message}. Check Firestore rules or connectivity.`,
+          variant: "destructive",
+          duration: 10000,
       });
-      setLoading(false); // Ensure loading is false if Firestore deletion fails.
+      setLoading(false); // Critical: set loading false if Firestore data deletion fails
     }
-    // setLoading(false) is primarily handled by onAuthStateChanged or in specific error paths above.
+    // setLoading(false) is handled by onAuthStateChanged if deletion is fully or partially successful (leading to sign out),
+    // or explicitly in the catch block for Firestore deletion failure.
   };
 
   return (
@@ -224,4 +216,3 @@ export const useAuth = () => {
   return context;
 };
 
-    
