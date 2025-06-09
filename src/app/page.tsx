@@ -19,8 +19,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added Tabs import
-import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle, Trash2, UserCog, Link2 } from 'lucide-react'; // Added UserCog and Link2
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle, Trash2, UserCog, Link2, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
@@ -60,6 +68,8 @@ export default function HomePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const { toast } = useToast();
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+
 
   useEffect(() => {
     const storedTheme = localStorage.getItem(LOCAL_STORAGE_KEY_THEME) as 'light' | 'dark' | null;
@@ -134,7 +144,7 @@ export default function HomePage() {
           const creationTimeMs = creationTime ? new Date(creationTime).getTime() : 0;
           const lastSignInTimeMs = lastSignInTime ? new Date(lastSignInTime).getTime() : 0;
 
-          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; // Reduced threshold
+          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; // 5 second threshold
           console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs}, threshold: 5000ms)`);
 
           if (isLikelyNewUser) {
@@ -277,6 +287,8 @@ export default function HomePage() {
       return;
     }
     console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
+    // Close the dropdown menu before starting deletion if it's open.
+    // This is handled by the AlertDialogTrigger being outside the Dropdown.
     await deleteUserAccount();
   };
 
@@ -324,22 +336,45 @@ export default function HomePage() {
                 <Button onClick={handleShare} disabled={authIsDeleting || authLoading}>
                   <Share2 className="mr-2 h-4 w-4" /> Share
                 </Button>
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar" />
-                  <AvatarFallback>
-                    {profileData.username ? profileData.username.charAt(0).toUpperCase() : <UserCircle size={20} />}
-                  </AvatarFallback>
-                </Avatar>
-                <Button variant="outline" onClick={signOutUser} disabled={authIsDeleting || authLoading}>
-                  <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                </Button>
+                
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={authIsDeleting || authLoading}>
-                      <Trash2 className={`mr-2 h-4 w-4 ${authIsDeleting ? 'animate-spin' : ''}`} />
-                      {authIsDeleting ? 'Deleting...' : 'Delete Account'}
-                    </Button>
-                  </AlertDialogTrigger>
+                  <DropdownMenu open={isAccountMenuOpen} onOpenChange={setIsAccountMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="flex items-center gap-2 px-2 py-1 h-9" disabled={authIsDeleting || authLoading}>
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar" />
+                          <AvatarFallback>
+                            {profileData.username ? profileData.username.charAt(0).toUpperCase() : <UserCircle size={18} />}
+                          </AvatarFallback>
+                        </Avatar>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isAccountMenuOpen ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel className="truncate">
+                        {user.displayName || profileData.username || "My Account"}
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={signOutUser} disabled={authIsDeleting || authLoading}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Sign Out
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                       {/* AlertDialogTrigger must be a direct child of AlertDialog for it to work correctly */}
+                       {/* We wrap the DropdownMenuItem with AlertDialogTrigger */}
+                      <AlertDialogTrigger asChild>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          disabled={authIsDeleting || authLoading}
+                          onSelect={(e) => e.preventDefault()} // Prevent dropdown from closing
+                        >
+                          <Trash2 className={`mr-2 h-4 w-4 ${authIsDeleting ? 'animate-spin' : ''}`} />
+                          {authIsDeleting ? 'Deleting...' : 'Delete Account'}
+                        </DropdownMenuItem>
+                      </AlertDialogTrigger>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {/* AlertDialogContent is separate and triggered by the item above */}
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -349,7 +384,7 @@ export default function HomePage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={authIsDeleting}>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel disabled={authIsDeleting} onClick={() => setIsAccountMenuOpen(false)}>Cancel</AlertDialogCancel>
                       <AlertDialogAction onClick={handleDeleteAccountConfirm} disabled={authIsDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                         {authIsDeleting ? 'Processing...' : 'Yes, delete account'}
                       </AlertDialogAction>
@@ -415,3 +450,5 @@ export default function HomePage() {
   );
 }
     
+
+      
