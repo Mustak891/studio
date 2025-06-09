@@ -72,62 +72,79 @@ export default function HomePage() {
   useEffect(() => {
     if (!isMounted || !user || !db) {
       if (user === null && !authLoading) { // User is definitively logged out
+        console.log("HomePage: User logged out or not yet loaded, resetting to initial data.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       }
       return;
     }
     
-
     const loadUserData = async () => {
+      console.log("HomePage: Attempting to load user data for UID:", user.uid);
       setFirestoreError(null);
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
+          console.log("HomePage: User data found in Firestore:", data);
           const loadedProfile = data.profile as ProfileData;
+          const currentUsername = slugifyUsername(loadedProfile.username || user.displayName || 'yourname');
           setProfileData({
             ...loadedProfile,
-            username: slugifyUsername(loadedProfile.username || user.displayName || 'yourname'),
+            username: currentUsername,
             profilePictureUrl: loadedProfile.profilePictureUrl || user.photoURL || 'https://placehold.co/150x150.png'
           });
           setLinks(data.links || initialLinks);
         } else {
+          console.log("HomePage: No data for user in Firestore, generating initial profile.");
           const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
           setProfileData(newProfile);
           setLinks(initialLinks);
+          // Save this initial profile to Firestore
+          console.log("HomePage: Saving new initial profile to Firestore for UID:", user.uid, newProfile);
           await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
+          toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up in the cloud." });
         }
       } catch (error: any) {
-        console.error("Error loading user data from Firestore:", error);
+        console.error("HomePage: Error loading user data from Firestore:", error);
         setFirestoreError(`Failed to load data: ${error.message}. Ensure Firestore is set up and rules allow reads.`);
         toast({ title: "Load Error", description: `Could not load your data from the cloud. ${error.message}`, variant: "destructive"});
       }
     };
     loadUserData();
-  }, [user, isMounted, db, authLoading]); // Added authLoading
+  }, [user, isMounted, db, authLoading, toast]);
 
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
-    if (!user || !db || !isMounted) return;
+    if (!user || !db || !isMounted) {
+      console.warn("SaveData: Aborted. User not available, DB not available, or component not mounted.", { user, db, isMounted });
+      toast({ title: "Save Error", description: "Cannot save. User not signed in or database unavailable.", variant: "destructive" });
+      return;
+    }
+    
+    console.log("SaveData: Attempting to save data for UID:", user.uid);
     setIsSaving(true);
     setFirestoreError(null);
     
-    const profileToSave = {
+    const profileToSave: ProfileData = {
       ...newProfileData,
       username: slugifyUsername(newProfileData.username) 
     };
+    console.log("SaveData: Profile object being saved:", profileToSave);
+    console.log("SaveData: Links object being saved:", newLinks);
 
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
-      setProfileData(profileToSave);
+      setProfileData(profileToSave); // Update local state to reflect saved state
+      setLinks(newLinks); // Update local links state
+      console.log("SaveData: Data successfully saved to Firestore.");
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
       });
     } catch (error: any) {
-      console.error("Error saving data to Firestore:", error);
+      console.error("SaveData: Error saving data to Firestore:", error);
       setFirestoreError(`Failed to save data: ${error.message}. Check Firestore rules and connectivity.`);
       toast({
         title: "Save Error",
@@ -152,6 +169,7 @@ export default function HomePage() {
       toast({ title: "Database Error", description: "Firestore is not available. Cannot save.", variant: "destructive"});
       return;
     }
+    console.log("HandleSaveChanges: Triggered. Profile Data:", profileData, "Links:", links);
     saveDataToFirestore(profileData, links);
   };
   
@@ -198,9 +216,9 @@ export default function HomePage() {
       return;
     }
     setIsDeleting(true);
-    await deleteUserAccount();
+    await deleteUserAccount(); // AuthContext handles UI updates and toasts
     setIsDeleting(false);
-    // AuthContext will handle user state change and subsequent UI updates
+    // AuthContext's onAuthStateChanged will handle setUser(null) and page refresh logic.
   };
   
   if (!isMounted || authLoading) {
@@ -259,7 +277,7 @@ export default function HomePage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteAccountConfirm} disabled={isDeleting}>
+                      <AlertDialogAction onClick={handleDeleteAccountConfirm} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                         {isDeleting ? 'Deleting...' : 'Yes, delete account'}
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -309,3 +327,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
