@@ -7,6 +7,10 @@ import { AuthProvider } from '@/contexts/AuthContext';
 export const metadata: Metadata = {
   title: 'LinkHub - Your Social Links, Centralized',
   description: 'Create your personalized landing page with all your important links.',
+  icons: {
+    icon: '/favicon.ico', // Place favicon.ico in your /public directory
+    apple: '/apple-icon.png', // Place apple-icon.png (e.g., 180x180) in your /public directory
+  },
 };
 
 export default function RootLayout({
@@ -17,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Favicon links are now handled by the metadata object above */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
