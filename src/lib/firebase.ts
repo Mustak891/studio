@@ -37,7 +37,7 @@ if (!firebaseConfig.apiKey) {
     try {
       app = initializeApp(firebaseConfig);
     } catch (e) {
-      console.error("Firebase Error: Failed to initialize Firebase app. This could be due to invalid configuration values even if the API key is present.", e);
+      console.error("Firebase Error: Failed to initialize Firebase app. This could be due to invalid configuration values even if the API key is present. Ensure all NEXT_PUBLIC_FIREBASE_... variables in .env.local are correct.", e);
     }
   } else {
     app = getApp();
@@ -47,20 +47,26 @@ if (!firebaseConfig.apiKey) {
     try {
       auth = getAuth(app);
     } catch (e) {
-       console.error("Firebase Error: Failed to get Auth instance. This may occur if the app was initialized with an invalid API key or configuration.", e);
+       console.error("Firebase Error: Failed to get Auth instance. This may occur if the app was initialized with an invalid API key or configuration. Verify .env.local and Firebase project settings.", e);
     }
   }
 }
 
 if (!auth) {
     console.error(
-      "Firebase Auth could not be initialized. This often means the Firebase app itself failed to initialize or auth could not be obtained. Common reasons include: \n" +
-      "1. A missing or empty NEXT_PUBLIC_FIREBASE_API_KEY in your .env.local file.\n" +
-      "2. An incorrect or invalid API key value in NEXT_PUBLIC_FIREBASE_API_KEY.\n" +
-      "3. Other missing or incorrect Firebase configuration values (authDomain, projectId, etc.) in .env.local.\n" +
-      "4. Your Firebase project settings might not authorize this app's domain (check 'Authorized domains' in Firebase Authentication settings).\n" +
-      "5. Google Sign-In (or other providers) may not be enabled in your Firebase project.\n" +
-      "Please double-check your .env.local file and your Firebase project console settings, then restart your development server."
+      "CRITICAL FIREBASE ERROR: Firebase Auth object could not be initialized. \n" +
+      "This is a fundamental problem meaning no Firebase Authentication features will work.\n" +
+      "Common reasons include:\n" +
+      "1. MISSING or EMPTY 'NEXT_PUBLIC_FIREBASE_API_KEY' in your .env.local file.\n" +
+      "2. INCORRECT or INVALID value for 'NEXT_PUBLIC_FIREBASE_API_KEY'.\n" +
+      "3. Other MISSING or INCORRECT Firebase configuration values (e.g., 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID') in .env.local.\n" +
+      "4. Firebase project settings might not authorize this app's domain (check 'Authorized domains' in Firebase Authentication -> Settings).\n" +
+      "5. 'Google' (or other) sign-in provider NOT ENABLED in Firebase Authentication -> Sign-in method.\n\n" +
+      "IMMEDIATE ACTIONS REQUIRED:\n" +
+      "A. CAREFULLY VERIFY ALL `NEXT_PUBLIC_FIREBASE_...` variables in your `.env.local` file against your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration).\n" +
+      "B. ENSURE 'Google' sign-in provider is ENABLED in Firebase console (Authentication -> Sign-in method).\n" +
+      "C. ENSURE your current development domain (e.g., *.cloudworkstations.dev, localhost) are listed under 'Authorized domains' in Firebase Authentication settings.\n" +
+      "D. CRITICAL: AFTER ANY CHANGES TO .env.local, YOU MUST RESTART your Next.js development server (stop it with Ctrl+C, then run `npm run dev`).\n"
     );
 }
 
