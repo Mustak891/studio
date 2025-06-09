@@ -34,6 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       if (!auth) {
         toast({ title: "Authentication Error", description: "Firebase Auth is not initialized. Please check your Firebase configuration.", variant: "destructive" });
+        console.error("AuthContext: signInWithGoogle failed because Firebase Auth instance is not available. Check firebase.ts and .env.local configuration.");
         setLoading(false);
         return;
       }
@@ -56,9 +57,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           variant: "destructive",
         });
       } else if (authError.code === 'auth/api-key-not-valid') {
+        console.error(
+          "Firebase Authentication Error (auth/api-key-not-valid): \n" +
+          "The API Key provided to Firebase is invalid or not authorized for your project.\n" +
+          "Troubleshooting steps:\n" +
+          "1. .env.local: Verify NEXT_PUBLIC_FIREBASE_API_KEY. It must EXACTLY match the 'Web API Key' from your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration).\n" +
+          "2. .env.local: Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN (e.g., your-project-id.firebaseapp.com) and other Firebase config variables.\n" +
+          "3. Firebase Console (Authentication -> Sign-in method): Ensure 'Google' provider is ENABLED.\n" +
+          "4. Firebase Console (Authentication -> Settings -> Authorized domains): Ensure 'localhost' AND your specific development domain (if applicable, e.g., *.cloudworkstations.dev) are listed. Consider adding your authDomain here too.\n" +
+          "5. Server Restart: CRITICAL - After any changes to .env.local, YOU MUST RESTART your Next.js development server.\n" +
+          "This error indicates a configuration issue with your Firebase project or environment variables, not typically a frontend code bug."
+        );
         toast({
           title: "Firebase API Key Invalid",
-          description: "The API Key for Firebase is not valid. Please meticulously check your .env.local configuration (NEXT_PUBLIC_FIREBASE_API_KEY) and ensure it matches the Web API Key in your Firebase project settings. Also, verify 'Authorized domains' in Firebase Authentication settings. Restart your server after any .env.local changes.",
+          description: "The API Key for Firebase is not valid. Please meticulously check your .env.local configuration (NEXT_PUBLIC_FIREBASE_API_KEY) and ensure it matches the Web API Key in your Firebase project settings. Also, verify 'Authorized domains' in Firebase Authentication settings. Restart your server after any .env.local changes. More details in browser console.",
           variant: "destructive",
           duration: 15000, 
         });
