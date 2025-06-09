@@ -55,6 +55,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           description: "The Google Sign-In process was cancelled or the popup was closed.",
           variant: "destructive",
         });
+      } else if (authError.code === 'auth/api-key-not-valid') {
+        toast({
+          title: "Firebase API Key Invalid",
+          description: "The API Key for Firebase is not valid. Please meticulously check your .env.local configuration (NEXT_PUBLIC_FIREBASE_API_KEY) and ensure it matches the Web API Key in your Firebase project settings. Also, verify 'Authorized domains' in Firebase Authentication settings. Restart your server after any .env.local changes.",
+          variant: "destructive",
+          duration: 15000, 
+        });
       }
       else {
         toast({
