@@ -71,8 +71,8 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isMounted || !user || !db) {
-      if (user === null && !authLoading) { // User is definitively logged out
-        console.log("HomePage: User logged out or not yet loaded, resetting to initial data.");
+      if (user === null && !authLoading) { 
+        console.log("HomePage: User logged out or not yet loaded, resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       }
@@ -97,14 +97,27 @@ export default function HomePage() {
           });
           setLinks(data.links || initialLinks);
         } else {
-          console.log("HomePage: No data for user in Firestore, generating initial profile.");
-          const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
-          setProfileData(newProfile);
-          setLinks(initialLinks);
-          // Save this initial profile to Firestore
-          console.log("HomePage: Saving new initial profile to Firestore for UID:", user.uid, newProfile);
-          await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
-          toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up in the cloud." });
+          // Only create a new profile if it looks like a truly new user sign-up.
+          const creationTime = user.metadata.creationTime ? new Date(user.metadata.creationTime).getTime() : 0;
+          const lastSignInTime = user.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime).getTime() : 0;
+          
+          // If creation time and last sign-in time are very close (e.g., within 10 seconds),
+          // it's likely a fresh sign-up or first sign-in after account creation.
+          // Otherwise, if the doc is missing, we assume it was intentionally deleted or shouldn't be auto-recreated.
+          if (creationTime && lastSignInTime && Math.abs(creationTime - lastSignInTime) < 10000) { // 10 seconds threshold
+            console.log("HomePage: No data in Firestore for UID:", user.uid, "AND user appears to be new. Generating and saving initial profile.");
+            const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
+            setProfileData(newProfile);
+            setLinks(initialLinks);
+            // Save this initial profile to Firestore
+            console.log("HomePage: Saving new initial profile to Firestore for UID:", user.uid, newProfile);
+            await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
+            toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up in the cloud." });
+          } else {
+            console.log("HomePage: No data in Firestore for UID:", user.uid, "User does not appear to be new (or metadata missing). Not creating initial profile. This might be after a deletion or if data was cleared externally. Resetting local editor state.");
+            setProfileData(generateInitialProfileData(user.displayName, user.photoURL));
+            setLinks(initialLinks);
+          }
         }
       } catch (error: any) {
         console.error("HomePage: Error loading user data from Firestore:", error);
@@ -117,12 +130,12 @@ export default function HomePage() {
 
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
     if (!user || !db || !isMounted) {
-      console.warn("SaveData: Aborted. User not available, DB not available, or component not mounted.", { user, db, isMounted });
+      console.warn("[SaveData]: Aborted. User not available, DB not available, or component not mounted.", { userAvailable: !!user, dbAvailable: !!db, isMounted });
       toast({ title: "Save Error", description: "Cannot save. User not signed in or database unavailable.", variant: "destructive" });
       return;
     }
     
-    console.log("SaveData: Attempting to save data for UID:", user.uid);
+    console.log("[SaveData]: Attempting to save data for UID:", user.uid);
     setIsSaving(true);
     setFirestoreError(null);
     
@@ -130,21 +143,21 @@ export default function HomePage() {
       ...newProfileData,
       username: slugifyUsername(newProfileData.username) 
     };
-    console.log("SaveData: Profile object being saved:", profileToSave);
-    console.log("SaveData: Links object being saved:", newLinks);
+    console.log("[SaveData]: Profile object being saved:", profileToSave);
+    console.log("[SaveData]: Links object being saved:", newLinks);
 
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
-      setProfileData(profileToSave); // Update local state to reflect saved state
-      setLinks(newLinks); // Update local links state
-      console.log("SaveData: Data successfully saved to Firestore.");
+      setProfileData(profileToSave); 
+      setLinks(newLinks); 
+      console.log("[SaveData]: Data successfully saved to Firestore for UID:", user.uid);
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
       });
     } catch (error: any) {
-      console.error("SaveData: Error saving data to Firestore:", error);
+      console.error("[SaveData]: Error saving data to Firestore for UID:", user.uid, error);
       setFirestoreError(`Failed to save data: ${error.message}. Check Firestore rules and connectivity.`);
       toast({
         title: "Save Error",
@@ -161,6 +174,7 @@ export default function HomePage() {
   };
 
   const handleSaveChanges = () => {
+    console.log("[HandleSaveChanges]: Triggered for user:", user ? user.uid : "No user");
     if (!user) {
       toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive"});
       return;
@@ -169,7 +183,7 @@ export default function HomePage() {
       toast({ title: "Database Error", description: "Firestore is not available. Cannot save.", variant: "destructive"});
       return;
     }
-    console.log("HandleSaveChanges: Triggered. Profile Data:", profileData, "Links:", links);
+    console.log("[HandleSaveChanges]: Profile Data to save:", profileData, "Links:", links);
     saveDataToFirestore(profileData, links);
   };
   
@@ -216,9 +230,9 @@ export default function HomePage() {
       return;
     }
     setIsDeleting(true);
-    await deleteUserAccount(); // AuthContext handles UI updates and toasts
+    setFirestoreError(null); // Clear previous firestore errors
+    await deleteUserAccount(); // AuthContext handles UI updates and toasts based on success/failure
     setIsDeleting(false);
-    // AuthContext's onAuthStateChanged will handle setUser(null) and page refresh logic.
   };
   
   if (!isMounted || authLoading) {
@@ -327,5 +341,6 @@ export default function HomePage() {
     </div>
   );
 }
+    
 
     
