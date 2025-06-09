@@ -149,7 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const currentUser = auth.currentUser; // Capture user before any async ops that might change its status
+    const currentUser = auth.currentUser; 
     const userUid = currentUser.uid;
 
     setLoading(true);
@@ -160,25 +160,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await deleteDoc(userDocRef);
       console.log("User data successfully deleted from Firestore for UID:", userUid);
 
-      // Step 2: If Firestore data deletion was successful, delete Firebase Auth user
+      // Step 2: If Firestore data deletion was successful, attempt to delete Firebase Auth user
       try {
-        await firebaseDeleteUser(currentUser); // Use the initially captured currentUser object
+        await firebaseDeleteUser(currentUser); 
         toast({ title: "Account Deleted", description: "Your account and all associated data have been successfully deleted." });
-        // onAuthStateChanged will handle setUser(null) and setLoading(false) upon successful auth deletion
+        // onAuthStateChanged will handle setUser(null) and setLoading(false) as the user state changes to null.
       } catch (authDeletionError: any) {
         console.error("Error deleting Firebase Auth user after Firestore data deletion:", authDeletionError);
         const authError = authDeletionError as AuthError;
-        let errorMessage = `Your data was deleted, but we failed to delete your authentication account. Error: ${authError.message}.`;
+        let errorMessage = `Your data was successfully deleted, but we failed to delete your authentication account. Error: ${authError.message}.`;
+        
         if (authError.code === 'auth/requires-recent-login') {
-          errorMessage = "Your data was deleted, but your authentication account requires re-login to be fully removed. Please sign out, sign back in, and try deleting again if you wish to remove the auth account.";
+          errorMessage = "Your data was deleted, but your authentication account requires re-login to be fully removed. You have been signed out. Please sign back in and try deleting your account again to fully remove it.";
+        } else {
+           errorMessage = `Your data was deleted, but deleting your authentication account failed: ${authError.message}. You have been signed out.`;
         }
+        
         toast({
           title: "Account Deletion Incomplete",
           description: errorMessage,
           variant: "destructive",
           duration: 15000,
         });
-        setLoading(false); // Reset loading as onAuthStateChanged might not trigger if auth user still exists
+        
+        // Since auth deletion failed but data is gone, sign the user out.
+        // This triggers onAuthStateChanged, sets user to null, and loading to false.
+        // It prevents the app from auto-recreating data for a "ghost" user.
+        await signOutUser(); 
       }
 
     } catch (firestoreError: any) {
@@ -189,10 +197,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive",
         duration: 10000,
       });
-      setLoading(false); // Reset loading as the process is halted
+      setLoading(false); 
     }
-    // setLoading(false) is handled by onAuthStateChanged if full deletion is successful,
-    // or manually in catch blocks for partial failures/halts.
   };
 
   return (
@@ -209,5 +215,7 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    
 
     
