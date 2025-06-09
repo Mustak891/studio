@@ -44,17 +44,14 @@ export default function UserPublicPage() {
     }
 
     const usernameToQuery = usernameSlugFromParam.toLowerCase();
-    console.log(`UserPublicPage: Attempting to fetch profile for username (slug): "${usernameToQuery}"`);
 
     const fetchUserProfile = async () => {
       setLoading(true);
       setError(null);
       try {
         const usersRef = collection(db, "users");
-        // Query for the exact slugified username. Usernames are stored as slugs.
         const q = query(usersRef, where("profile.username", "==", usernameToQuery), limit(1));
         
-        console.log(`UserPublicPage: Executing Firestore query for profile.username == "${usernameToQuery}"`);
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.size > 1) {
@@ -64,7 +61,6 @@ export default function UserPublicPage() {
         if (!querySnapshot.empty) {
           const userDoc = querySnapshot.docs[0];
           const userData = userDoc.data();
-          console.log("UserPublicPage: Profile found in Firestore:", userData);
           setProfileData(userData.profile as ProfileData);
           setLinks(userData.links as LinkData[]);
         } else {

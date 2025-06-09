@@ -3,18 +3,6 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
-// For debugging: Log if environment variables are loaded (client-side only)
-if (typeof window !== 'undefined') {
-  console.log(
-    'Firebase Init: NEXT_PUBLIC_FIREBASE_API_KEY loaded:',
-    !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-  );
-  console.log(
-    'Firebase Init: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN loaded:',
-    !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-  );
-}
-
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -76,3 +64,4 @@ if (!firebaseConfig.apiKey) {
 }
 
 export { app, auth, db, googleProvider };
+

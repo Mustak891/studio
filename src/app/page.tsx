@@ -87,12 +87,8 @@ export default function HomePage() {
   }, [theme, isMounted]);
 
   useEffect(() => {
-    console.log(`[HomePage-UserDataEffect-ENTRY] User: ${user ? user.uid : 'null'}, AuthLoading: ${authLoading}, AuthIsDeleting: ${authIsDeleting}, IsMounted: ${isMounted}, DB: ${!!db}`);
-    
     if (authIsDeleting || authLoading) {
-      console.log(`[HomePage-UserDataEffect-BUSY_STATE]: Auth is deleting (authIsDeleting: ${authIsDeleting}) OR Auth is loading (authLoading: ${authLoading}). Halting data load/create.`);
       if (authIsDeleting && !authLoading && !user) {
-        console.log("[HomePage-UserDataEffect-BUSY_STATE]: Deletion finished, user is null. Resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       }
@@ -101,31 +97,25 @@ export default function HomePage() {
 
     if (!isMounted || !db) {
       if (user === null && !authLoading) {
-        console.log("[HomePage-UserDataEffect-RESET-LOCAL-UNMOUNTED_OR_NO_DB]: User is null and auth not loading. Resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
-      } else {
-        console.log(`[HomePage-UserDataEffect-PREMATURE-EXIT]: Not ready. IsMounted: ${isMounted}, DB: ${!!db}. Will wait.`);
       }
       return;
     }
 
     if (!user) {
-      console.log("[HomePage-UserDataEffect-NO-USER]: No authenticated user (authIsDeleting and authLoading are false). Resetting local editor state.");
       setProfileData(generateInitialProfileData());
       setLinks(initialLinks);
       return;
     }
 
     const loadUserData = async () => {
-      console.log(`[HomePage-UserDataEffect-LOAD]: User authenticated (UID: ${user.uid}). Attempting to load user data.`);
       setFirestoreError(null);
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          console.log("[HomePage-UserDataEffect-LOAD]: User data FOUND in Firestore for UID:", user.uid, data);
           const loadedProfile = data.profile as ProfileData;
           const currentUsername = slugifyUsername(loadedProfile.username || user.displayName || 'yourname');
           setProfileData({
@@ -135,30 +125,21 @@ export default function HomePage() {
           });
           setLinks(data.links || initialLinks);
         } else {
-          console.log("[HomePage-UserDataEffect-LOAD]: User data NOT FOUND in Firestore for UID:", user.uid, ". Checking if user is new or if data was deleted.");
-
           const creationTime = user.metadata.creationTime;
           const lastSignInTime = user.metadata.lastSignInTime;
-          console.log(`[HomePage-UserDataEffect-LOAD]: User Metadata: creationTime: ${creationTime}, lastSignInTime: ${lastSignInTime}`);
           
           const creationTimeMs = creationTime ? new Date(creationTime).getTime() : 0;
           const lastSignInTimeMs = lastSignInTime ? new Date(lastSignInTime).getTime() : 0;
 
-          // A user is considered "new" if their creation time and last sign-in time are very close (e.g., within 5 seconds).
-          // This helps prevent re-creating a profile if a user's document was deleted but their auth session metadata is old.
-          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; // 5 second threshold
-          console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs}, threshold: 5000ms)`);
+          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; 
 
           if (isLikelyNewUser) {
-            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid, ") appears to be NEW based on timestamps. Generating and saving initial profile to Firestore.");
             const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
             setProfileData(newProfile);
             setLinks(initialLinks);
             await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
-            console.log("[HomePage-UserDataEffect-LOAD]: Initial profile for new user (UID:", user.uid, ") SAVED to Firestore.");
             toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up." });
           } else {
-            console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new based on timestamps. Resetting local editor state using auth details WITHOUT saving to Firestore.");
             setProfileData(generateInitialProfileData(user.displayName, user.photoURL));
             setLinks(initialLinks);
           }
@@ -180,13 +161,12 @@ export default function HomePage() {
       toast({ title: "Save Error", description: "Cannot save. User not signed in or database unavailable.", variant: "destructive" });
       return;
     }
-    if (authIsDeleting || authLoading) { // Check authLoading as well
+    if (authIsDeleting || authLoading) {
       console.warn("[SaveData]: Aborted. Account deletion or auth loading in progress.");
       toast({ title: "Save Error", description: "Cannot save while account deletion or authentication is in progress.", variant: "destructive" });
       return;
     }
 
-    console.log("[SaveData]: Attempting to save data for UID:", user.uid);
     setIsSaving(true);
     setFirestoreError(null);
 
@@ -194,15 +174,12 @@ export default function HomePage() {
       ...newProfileData,
       username: slugifyUsername(newProfileData.username)
     };
-    console.log("[SaveData]: Profile object being saved to Firestore:", profileToSave);
-    console.log("[SaveData]: Links object being saved to Firestore:", newLinks);
 
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
       setProfileData(profileToSave);
       setLinks(newLinks);
-      console.log("[SaveData]: Data successfully SAVED to Firestore for UID:", user.uid);
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
@@ -218,14 +195,13 @@ export default function HomePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, db, toast, isMounted, authIsDeleting, authLoading]); // Added authLoading
+  }, [user, db, toast, isMounted, authIsDeleting, authLoading]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
   const handleSaveChanges = () => {
-    console.log("[HandleSaveChanges]: Triggered. Current User UID:", user ? user.uid : "No user");
     if (!user) {
       toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive" });
       return;
@@ -238,7 +214,6 @@ export default function HomePage() {
       toast({ title: "Action Blocked", description: "Account deletion or loading in progress.", variant: "destructive" });
       return;
     }
-    console.log("[HandleSaveChanges]: Profile Data to save:", profileData, "Links:", links);
     saveDataToFirestore(profileData, links);
   };
 
@@ -288,11 +263,9 @@ export default function HomePage() {
       toast({ title: "Not Signed In", description: "Please sign in to delete your account.", variant: "destructive" });
       return;
     }
-    console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
     await deleteUserAccount();
   };
 
-  // This handles the initial "app is loading" state before isMounted or auth state is known
   if (!isMounted || (authLoading && !user && !authIsDeleting)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
@@ -399,16 +372,16 @@ export default function HomePage() {
         </div>
       </header>
 
-      {!user && !authLoading ? ( // Ensure auth is not loading before showing sign-in prompt
+      {!user && !authLoading && !authIsDeleting ? ( 
         <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center text-center">
           <h2 className="text-3xl font-bold text-foreground mb-4">Welcome to {APP_NAME}!</h2>
           <p className="text-muted-foreground mb-8 text-lg">Sign in to create and manage your personalized link page.</p>
-          <Button size="lg" onClick={signInWithGoogle} disabled={authIsDeleting || authLoading}> {/* authLoading check is redundant if already handled above but safe */}
+          <Button size="lg" onClick={signInWithGoogle} disabled={authIsDeleting || authLoading}>
             <LogIn className="mr-2 h-5 w-5" /> Sign in with Google
           </Button>
         </main>
       ) : (
-        user && ( // Only render editor content if user exists
+        user && !authIsDeleting && ( 
           <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 max-w-screen-2xl">
             {firestoreError && (
               <div className="mb-4 p-4 border border-destructive/50 bg-destructive/10 text-destructive rounded-md flex items-center gap-2">
@@ -452,3 +425,4 @@ export default function HomePage() {
     
 
       
+

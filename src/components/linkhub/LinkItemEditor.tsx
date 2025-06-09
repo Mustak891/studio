@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { LinkData } from '@/lib/types';
@@ -66,9 +67,6 @@ export default function LinkItemEditor({ link, onUpdate, onDelete }: LinkItemEdi
     }
   };
   
-  // Debounce onUpdate if performance becomes an issue for many links
-  // For now, direct update is fine.
-
   return (
     <div className="p-4 border rounded-lg bg-card flex flex-col gap-4 shadow-sm hover:shadow-md transition-shadow duration-200">
       <div className="flex items-center gap-2">
@@ -122,3 +120,4 @@ export default function LinkItemEditor({ link, onUpdate, onDelete }: LinkItemEdi
     </div>
   );
 }
+
