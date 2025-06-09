@@ -74,7 +74,7 @@ export default function HomePage() {
 
     if (!isMounted || !db) {
       if (user === null && !authLoading) {
-        console.log("[HomePage-UserDataEffect-RESET-LOCAL]: User is null and auth not loading. Likely logged out. Resetting local editor state.");
+        console.log("[HomePage-UserDataEffect-RESET-LOCAL]: User is null and auth not loading (initial check). Resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       } else {
@@ -88,7 +88,7 @@ export default function HomePage() {
       return;
     }
 
-    // At this point, authLoading is false.
+    // At this point, authLoading is false, component is mounted, db is available.
     if (!user) {
       // User is definitively logged out.
       console.log("[HomePage-UserDataEffect-NO-USER]: No authenticated user (authLoading is false). Resetting local editor state.");
@@ -118,27 +118,29 @@ export default function HomePage() {
         } else {
           // Document does NOT exist in Firestore for this authenticated user.
           console.log("[HomePage-UserDataEffect-LOAD]: User data NOT FOUND in Firestore for UID:", user.uid,". Checking if user is new or if data was deleted.");
-          console.log("[HomePage-UserDataEffect-LOAD]: User Metadata: creationTime:", user.metadata.creationTime, "lastSignInTime:", user.metadata.lastSignInTime);
-
-          const creationTimeMs = user.metadata.creationTime ? new Date(user.metadata.creationTime).getTime() : 0;
-          const lastSignInTimeMs = user.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime).getTime() : 0;
           
-          // More stringent check: isLikelyNewUser only if both timestamps are valid and very close.
-          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 15000; // Increased threshold slightly
+          const creationTime = user.metadata.creationTime;
+          const lastSignInTime = user.metadata.lastSignInTime;
+          console.log(`[HomePage-UserDataEffect-LOAD]: User Metadata: creationTime: ${creationTime}, lastSignInTime: ${lastSignInTime}`);
 
-          console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs})`);
+          const creationTimeMs = creationTime ? new Date(creationTime).getTime() : 0;
+          const lastSignInTimeMs = lastSignInTime ? new Date(lastSignInTime).getTime() : 0;
+          
+          // TIGHTENED: isLikelyNewUser only if timestamps are valid and VERY close (e.g., within 5 seconds).
+          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; 
+
+          console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs}, threshold: 5000ms)`);
 
           if (isLikelyNewUser) {
-            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid,") appears to be NEW based on timestamps. Generating and saving initial profile to Firestore.");
+            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid,") appears to be NEW based on very close timestamps. Generating and saving initial profile to Firestore.");
             const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
             setProfileData(newProfile); 
             setLinks(initialLinks);     
-            // THIS IS THE CRITICAL LINE THAT SAVES DEFAULT DATA
             await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
             console.log("[HomePage-UserDataEffect-LOAD]: Initial profile for new user (UID:", user.uid,") SAVED to Firestore.");
             toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up." });
           } else {
-            console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new (or timestamps are far apart/invalid, or one is zero). Resetting local editor state WITHOUT saving to Firestore. This state can occur after data deletion if auth record persists.");
+            console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new (timestamps too far apart/invalid, or one is zero, OR isLikelyNewUser is false). Resetting local editor state using auth details WITHOUT saving to Firestore. This state can occur after data deletion if auth record persists or if it's an existing user signing in with no prior Firestore doc.");
             setProfileData(generateInitialProfileData(user.displayName, user.photoURL));
             setLinks(initialLinks);
           }
@@ -176,7 +178,7 @@ export default function HomePage() {
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
-      setProfileData(profileToSave);
+      setProfileData(profileToSave); // Ensure local state reflects the successfully saved state
       setLinks(newLinks);
       console.log("[SaveData]: Data successfully SAVED to Firestore for UID:", user.uid);
       toast({
@@ -259,7 +261,7 @@ export default function HomePage() {
     setIsDeleting(true);
     setFirestoreError(null); 
     console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
-    await deleteUserAccount();
+    await deleteUserAccount(); // This will handle signing out and updating user state via AuthContext
     setIsDeleting(false); 
   };
 
@@ -369,4 +371,6 @@ export default function HomePage() {
     </div>
   );
 }
+    
+
     
