@@ -16,7 +16,8 @@ const PUBLIC_LINKS_KEY_PREFIX = `${SHARED_APP_NAME}_public_links_`;
 
 export default function UserPublicPage() {
   const params = useParams();
-  const usernameSlug = params.username as string;
+  // Ensure usernameSlug is always lowercase for consistent localStorage key lookup
+  const usernameSlug = params.username ? (params.username as string).toLowerCase() : "";
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [links, setLinks] = useState<LinkData[] | null>(null);
@@ -29,16 +30,17 @@ export default function UserPublicPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted || !usernameSlug) {
-      if (isMounted && !usernameSlug) {
-          setError("Username not found in URL.");
-          setLoading(false);
-      }
+    if (!isMounted) return;
+
+    if (!usernameSlug) {
+      setError("Username not found in URL.");
+      setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
+      // usernameSlug is already lowercased above
       const publicProfileKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
       const publicLinksKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
 
@@ -101,4 +103,3 @@ export default function UserPublicPage() {
   );
 }
 
-    
