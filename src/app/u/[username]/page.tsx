@@ -7,14 +7,14 @@ import type { ProfileData, LinkData } from '@/lib/types';
 import LivePreview from '@/components/linkhub/LivePreview';
 import { Button } from '@/components/ui/button';
 import { Home, AlertTriangle } from 'lucide-react';
-import { db } from '@/lib/firebase'; // Import Firestore instance
+import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 const SHARED_APP_NAME = "LinkHub";
 
 export default function UserPublicPage() {
   const params = useParams();
-  const usernameSlugFromParam = params.username ? (params.username as string).toLowerCase() : "";
+  const usernameSlugFromParam = params.username ? (Array.isArray(params.username) ? params.username[0] : params.username) : "";
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [links, setLinks] = useState<LinkData[] | null>(null);
@@ -29,6 +29,7 @@ export default function UserPublicPage() {
   useEffect(() => {
     if (!isMounted || !db) {
       if (isMounted && !db) {
+        console.error("UserPublicPage: Firestore (db) instance is not available.");
         setError("Firestore is not available. Cannot load profile.");
         setLoading(false);
       }
@@ -36,34 +37,38 @@ export default function UserPublicPage() {
     }
 
     if (!usernameSlugFromParam) {
+      console.error("UserPublicPage: Username not found in URL parameters.");
       setError("Username not found in URL.");
       setLoading(false);
       return;
     }
 
+    const usernameToQuery = usernameSlugFromParam.toLowerCase();
+    console.log(`UserPublicPage: Attempting to fetch profile for username (lowercase): "${usernameToQuery}"`);
+
     const fetchUserProfile = async () => {
       setLoading(true);
       setError(null);
       try {
-        // Query for user document where profile.username matches the slug
         const usersRef = collection(db, "users");
-        // Ensure usernameSlugFromParam is a string and not an array
-        const usernameToQuery = Array.isArray(usernameSlugFromParam) ? usernameSlugFromParam[0] : usernameSlugFromParam;
-        
         const q = query(usersRef, where("profile.username", "==", usernameToQuery), limit(1));
+        
+        console.log(`UserPublicPage: Executing Firestore query for profile.username == "${usernameToQuery}"`);
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
           const userDoc = querySnapshot.docs[0];
           const userData = userDoc.data();
+          console.log("UserPublicPage: Profile found in Firestore:", userData);
           setProfileData(userData.profile as ProfileData);
           setLinks(userData.links as LinkData[]);
         } else {
+          console.warn(`UserPublicPage: No profile found in Firestore for username "${usernameToQuery}". Query snapshot was empty.`);
           setError(`Profile for "${usernameToQuery}" not found. This user may not exist or hasn't set up their LinkHub page yet.`);
         }
       } catch (e: any) {
-        console.error("Error loading public profile from Firestore:", e);
-        setError(`Could not load profile data. Error: ${e.message}. This might be due to Firestore security rules or network issues.`);
+        console.error("UserPublicPage: Error loading public profile from Firestore:", e);
+        setError(`Could not load profile data. Error: ${e.message}. This might be due to Firestore security rules, missing indexes, or network issues. Check browser console for Firestore index creation links if applicable.`);
       } finally {
         setLoading(false);
       }
@@ -90,7 +95,11 @@ export default function UserPublicPage() {
         <div className="bg-card p-8 rounded-lg shadow-xl max-w-md w-full">
           <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-destructive mb-4">Profile Not Found</h1>
-          <p className="text-muted-foreground mb-8 whitespace-pre-line">{error || "The requested profile could not be loaded."}</p>
+          <p className="text-muted-foreground mb-6 whitespace-pre-line">{error || "The requested profile could not be loaded."}</p>
+          <p className="text-xs text-muted-foreground mb-8">
+            If you are the owner, ensure your username is correctly set and saved in the editor.
+            If this problem persists, check the browser console for Firestore indexing messages.
+          </p>
           <Button asChild>
             <a href="/">
               <Home className="mr-2 h-5 w-5" />
