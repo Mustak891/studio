@@ -57,28 +57,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           variant: "destructive",
         });
       } else if (authError.code === 'auth/api-key-not-valid') {
-        console.error(
+        const consoleErrorMessage = 
           "Firebase Authentication Error (auth/api-key-not-valid): \n" +
-          "The API Key provided to Firebase is invalid or not authorized for your project.\n" +
+          "The API Key provided to Firebase (NEXT_PUBLIC_FIREBASE_API_KEY in .env.local) is invalid or not authorized for your project.\n" +
           "Troubleshooting steps:\n" +
           "1. .env.local: Verify NEXT_PUBLIC_FIREBASE_API_KEY. It must EXACTLY match the 'Web API Key' from your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration).\n" +
           "2. .env.local: Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN (e.g., your-project-id.firebaseapp.com) and other Firebase config variables.\n" +
           "3. Firebase Console (Authentication -> Sign-in method): Ensure 'Google' provider is ENABLED.\n" +
           "4. Firebase Console (Authentication -> Settings -> Authorized domains): Ensure 'localhost' AND your specific development domain (if applicable, e.g., *.cloudworkstations.dev) are listed. Consider adding your authDomain here too.\n" +
           "5. Server Restart: CRITICAL - After any changes to .env.local, YOU MUST RESTART your Next.js development server.\n" +
-          "This error indicates a configuration issue with your Firebase project or environment variables, not typically a frontend code bug."
-        );
+          "This error indicates a configuration issue with your Firebase project or environment variables, not typically a frontend code bug.";
+        console.error(consoleErrorMessage);
         toast({
           title: "Firebase API Key Invalid",
           description: "The API Key for Firebase is not valid. Please meticulously check your .env.local configuration (NEXT_PUBLIC_FIREBASE_API_KEY) and ensure it matches the Web API Key in your Firebase project settings. Also, verify 'Authorized domains' in Firebase Authentication settings. Restart your server after any .env.local changes. More details in browser console.",
           variant: "destructive",
           duration: 15000, 
         });
+      } else if (authError.code === 'auth/unauthorized-domain') {
+        const currentHost = window.location.hostname;
+        const consoleErrorMessage = 
+          `Firebase Authentication Error (auth/unauthorized-domain): \n` +
+          `The domain '${currentHost}' is not authorized to perform operations in your Firebase project.\n` +
+          `Troubleshooting steps:\n` +
+          `1. Go to your Firebase Console (https://console.firebase.google.com/).\n` +
+          `2. Select your project.\n` +
+          `3. Navigate to 'Authentication' (under Build).\n` +
+          `4. Click on the 'Settings' tab.\n` +
+          `5. Under 'Authorized domains', click 'Add domain' and add '${currentHost}'.\n` +
+          `6. Also ensure 'localhost' is listed if you test locally, and your project's authDomain (e.g., your-project-id.firebaseapp.com) might also need to be there.\n` +
+          `This error means Firebase is actively rejecting requests from this domain.`;
+        console.error(consoleErrorMessage);
+        toast({
+          title: "Domain Not Authorized",
+          description: `The domain '${currentHost}' is not authorized for Firebase operations. Please add it to 'Authorized domains' in your Firebase Authentication settings. See console for more details.`,
+          variant: "destructive",
+          duration: 15000,
+        });
       }
       else {
         toast({
           title: "Sign In Failed",
-          description: `Could not sign in with Google. Error: ${authError.message}`,
+          description: `Could not sign in with Google. Error: ${authError.message} (Code: ${authError.code})`,
           variant: "destructive"
         });
       }
