@@ -19,7 +19,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added Tabs import
+import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle, Trash2, UserCog, Link2 } from 'lucide-react'; // Added UserCog and Link2
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
@@ -43,13 +44,13 @@ const initialLinks: LinkData[] = [
 ];
 
 export default function HomePage() {
-  const { 
-    user, 
-    loading: authLoading, 
-    isDeleting: authIsDeleting, // Get isDeleting state from AuthContext
-    signInWithGoogle, 
-    signOutUser, 
-    deleteUserAccount 
+  const {
+    user,
+    loading: authLoading,
+    isDeleting: authIsDeleting,
+    signInWithGoogle,
+    signOutUser,
+    deleteUserAccount
   } = useAuth();
   const [profileData, setProfileData] = useState<ProfileData>(generateInitialProfileData());
   const [links, setLinks] = useState<LinkData[]>(initialLinks);
@@ -57,7 +58,6 @@ export default function HomePage() {
   const [isMounted, setIsMounted] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  // const [isDeleting, setIsDeleting] = useState(false); // This local isDeleting is now handled by authIsDeleting from context
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -81,15 +81,14 @@ export default function HomePage() {
 
     if (authIsDeleting || authLoading) {
       console.log(`[HomePage-UserDataEffect-BUSY_STATE]: Auth is deleting (authIsDeleting: ${authIsDeleting}) OR Auth is loading (authLoading: ${authLoading}). Halting data load/create.`);
-      if(authIsDeleting && !authLoading && !user) {
-         // If deleting, and not loading, and user is null (sign out completed), ensure local state is reset
+      if (authIsDeleting && !authLoading && !user) {
         console.log("[HomePage-UserDataEffect-BUSY_STATE]: Deletion finished, user is null. Resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       }
       return;
     }
-    
+
     if (!isMounted || !db) {
       if (user === null && !authLoading) {
         console.log("[HomePage-UserDataEffect-RESET-LOCAL-UNMOUNTED_OR_NO_DB]: User is null and auth not loading. Resetting local editor state.");
@@ -101,16 +100,13 @@ export default function HomePage() {
       return;
     }
 
-    // At this point: authIsDeleting is false, authLoading is false, component is mounted, db is available.
     if (!user) {
-      // User is definitively logged out.
       console.log("[HomePage-UserDataEffect-NO-USER]: No authenticated user (authIsDeleting and authLoading are false). Resetting local editor state.");
       setProfileData(generateInitialProfileData());
       setLinks(initialLinks);
       return;
     }
 
-    // User is authenticated.
     const loadUserData = async () => {
       console.log(`[HomePage-UserDataEffect-LOAD]: User authenticated (UID: ${user.uid}). Attempting to load user data.`);
       setFirestoreError(null);
@@ -129,25 +125,25 @@ export default function HomePage() {
           });
           setLinks(data.links || initialLinks);
         } else {
-          console.log("[HomePage-UserDataEffect-LOAD]: User data NOT FOUND in Firestore for UID:", user.uid,". Checking if user is new or if data was deleted.");
-          
+          console.log("[HomePage-UserDataEffect-LOAD]: User data NOT FOUND in Firestore for UID:", user.uid, ". Checking if user is new or if data was deleted.");
+
           const creationTime = user.metadata.creationTime;
           const lastSignInTime = user.metadata.lastSignInTime;
           console.log(`[HomePage-UserDataEffect-LOAD]: User Metadata: creationTime: ${creationTime}, lastSignInTime: ${lastSignInTime}`);
 
           const creationTimeMs = creationTime ? new Date(creationTime).getTime() : 0;
           const lastSignInTimeMs = lastSignInTime ? new Date(lastSignInTime).getTime() : 0;
-          
-          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; 
+
+          const isLikelyNewUser = creationTimeMs > 0 && lastSignInTimeMs > 0 && Math.abs(creationTimeMs - lastSignInTimeMs) < 5000; // Reduced threshold
           console.log(`[HomePage-UserDataEffect-LOAD]: isLikelyNewUser evaluation: ${isLikelyNewUser} (creationTimeMs: ${creationTimeMs}, lastSignInTimeMs: ${lastSignInTimeMs}, threshold: 5000ms)`);
 
           if (isLikelyNewUser) {
-            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid,") appears to be NEW. Generating and saving initial profile to Firestore.");
+            console.log("[HomePage-UserDataEffect-LOAD]: User (UID:", user.uid, ") appears to be NEW. Generating and saving initial profile to Firestore.");
             const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
-            setProfileData(newProfile); 
-            setLinks(initialLinks);     
-            await setDoc(userDocRef, { profile: newProfile, links: initialLinks }); // This is the problematic setDoc
-            console.log("[HomePage-UserDataEffect-LOAD]: Initial profile for new user (UID:", user.uid,") SAVED to Firestore.");
+            setProfileData(newProfile);
+            setLinks(initialLinks);
+            await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
+            console.log("[HomePage-UserDataEffect-LOAD]: Initial profile for new user (UID:", user.uid, ") SAVED to Firestore.");
             toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up." });
           } else {
             console.log("[HomePage-UserDataEffect-LOAD]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new. Resetting local editor state using auth details WITHOUT saving to Firestore.");
@@ -158,14 +154,13 @@ export default function HomePage() {
       } catch (error: any) {
         console.error("[HomePage-UserDataEffect-LOAD]: Error loading/processing user data from Firestore for UID:", user.uid, error);
         setFirestoreError(`Failed to load data: ${error.message}. Ensure Firestore is set up and rules allow reads.`);
-        toast({ title: "Load Error", description: `Could not load your data from the cloud. ${error.message}`, variant: "destructive"});
+        toast({ title: "Load Error", description: `Could not load your data from the cloud. ${error.message}`, variant: "destructive" });
       }
     };
 
     loadUserData();
 
-  }, [user, isMounted, db, authLoading, authIsDeleting, toast]); // Added authIsDeleting to dependency array
-
+  }, [user, isMounted, db, authLoading, authIsDeleting, toast]);
 
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
     if (!user || !db || !isMounted) {
@@ -178,7 +173,6 @@ export default function HomePage() {
       toast({ title: "Save Error", description: "Cannot save while account deletion is in progress.", variant: "destructive" });
       return;
     }
-
 
     console.log("[SaveData]: Attempting to save data for UID:", user.uid);
     setIsSaving(true);
@@ -194,7 +188,7 @@ export default function HomePage() {
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
-      setProfileData(profileToSave); 
+      setProfileData(profileToSave);
       setLinks(newLinks);
       console.log("[SaveData]: Data successfully SAVED to Firestore for UID:", user.uid);
       toast({
@@ -212,7 +206,7 @@ export default function HomePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, db, toast, isMounted, authIsDeleting]); // Added authIsDeleting
+  }, [user, db, toast, isMounted, authIsDeleting]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -221,15 +215,15 @@ export default function HomePage() {
   const handleSaveChanges = () => {
     console.log("[HandleSaveChanges]: Triggered. Current User UID:", user ? user.uid : "No user");
     if (!user) {
-      toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive"});
+      toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive" });
       return;
     }
     if (!db) {
-      toast({ title: "Database Error", description: "Firestore is not available. Cannot save.", variant: "destructive"});
+      toast({ title: "Database Error", description: "Firestore is not available. Cannot save.", variant: "destructive" });
       return;
     }
-     if (authIsDeleting) {
-      toast({ title: "Action Blocked", description: "Account deletion in progress.", variant: "destructive"});
+    if (authIsDeleting || authLoading) {
+      toast({ title: "Action Blocked", description: "Account deletion or loading in progress.", variant: "destructive" });
       return;
     }
     console.log("[HandleSaveChanges]: Profile Data to save:", profileData, "Links:", links);
@@ -238,11 +232,11 @@ export default function HomePage() {
 
   const handleShare = async () => {
     if (!user) {
-      toast({ title: "Not Signed In", description: "Please sign in to share your page.", variant: "destructive"});
+      toast({ title: "Not Signed In", description: "Please sign in to share your page.", variant: "destructive" });
       return;
     }
-     if (authIsDeleting) {
-      toast({ title: "Action Blocked", description: "Account deletion in progress.", variant: "destructive"});
+    if (authIsDeleting || authLoading) {
+      toast({ title: "Action Blocked", description: "Action unavailable during account deletion or loading.", variant: "destructive" });
       return;
     }
 
@@ -279,16 +273,14 @@ export default function HomePage() {
 
   const handleDeleteAccountConfirm = async () => {
     if (!user) {
-      toast({ title: "Not Signed In", description: "Please sign in to delete your account.", variant: "destructive"});
+      toast({ title: "Not Signed In", description: "Please sign in to delete your account.", variant: "destructive" });
       return;
     }
     console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
-    await deleteUserAccount(); 
-    // isDeleting state is managed by AuthContext
+    await deleteUserAccount();
   };
 
-  // This loading state now considers authLoading and authIsDeleting for initial page load
-  if (!isMounted || (authLoading && !user && !authIsDeleting)) { 
+  if (!isMounted || (authLoading && !user && !authIsDeleting)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <svg className="animate-spin h-10 w-10 text-primary mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -299,12 +291,11 @@ export default function HomePage() {
       </div>
     );
   }
-  
-  // If authIsDeleting is true, show a specific message instead of editor or login prompt
+
   if (authIsDeleting) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
-         <svg className="animate-spin h-10 w-10 text-destructive mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg className="animate-spin h-10 w-10 text-destructive mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -321,7 +312,7 @@ export default function HomePage() {
         <div className="container flex h-16 items-center justify-between max-w-screen-2xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-bold text-primary font-headline">{APP_NAME}</h1>
           <div className="flex items-center gap-2">
-             <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Toggle theme" disabled={authIsDeleting || authLoading}>
+            <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Toggle theme" disabled={authIsDeleting || authLoading}>
               {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
             {user ? (
@@ -334,9 +325,9 @@ export default function HomePage() {
                   <Share2 className="mr-2 h-4 w-4" /> Share
                 </Button>
                 <Avatar className="h-9 w-9">
-                   <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar"/>
+                  <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar" />
                   <AvatarFallback>
-                    {profileData.username ? profileData.username.charAt(0).toUpperCase() : <UserCircle size={20}/>}
+                    {profileData.username ? profileData.username.charAt(0).toUpperCase() : <UserCircle size={20} />}
                   </AvatarFallback>
                 </Avatar>
                 <Button variant="outline" onClick={signOutUser} disabled={authIsDeleting || authLoading}>
@@ -375,7 +366,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      {!user ? ( // This condition also depends on user state which is now more robustly managed by AuthContext
+      {!user ? (
         <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center text-center">
           <h2 className="text-3xl font-bold text-foreground mb-4">Welcome to {APP_NAME}!</h2>
           <p className="text-muted-foreground mb-8 text-lg">Sign in to create and manage your personalized link page.</p>
@@ -392,10 +383,24 @@ export default function HomePage() {
             </div>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-            <div className="lg:col-span-2 space-y-8">
-              <ProfileEditor profileData={profileData} onProfileChange={setProfileData} />
-              <LinkListEditor links={links} onLinksChange={setLinks} />
-            </div>
+            <Tabs defaultValue="profile" className="lg:col-span-2">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="profile">
+                  <UserCog className="mr-2 h-5 w-5" />
+                  Profile Settings
+                </TabsTrigger>
+                <TabsTrigger value="links">
+                  <Link2 className="mr-2 h-5 w-5" />
+                  Manage Links
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="profile">
+                <ProfileEditor profileData={profileData} onProfileChange={setProfileData} />
+              </TabsContent>
+              <TabsContent value="links">
+                <LinkListEditor links={links} onLinksChange={setLinks} />
+              </TabsContent>
+            </Tabs>
             <div className="lg:col-span-1 lg:sticky lg:top-24 self-start max-h-[calc(100vh-8rem)]">
               <LivePreview profileData={profileData} links={links} showTitle={true} />
             </div>
