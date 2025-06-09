@@ -31,9 +31,9 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  experimental: {
-    allowedDevOrigins: ['https://9000-firebase-studio-1749438806929.cluster-nzwlpk54dvagsxetkvxzbvslyi.cloudworkstations.dev'],
-  },
+  allowedDevOrigins: ['https://9000-firebase-studio-1749438806929.cluster-nzwlpk54dvagsxetkvxzbvslyi.cloudworkstations.dev'],
+  // The experimental block is removed as allowedDevOrigins was its only key.
+  // If there were other experimental flags, they would remain here.
 };
 
 export default nextConfig;
