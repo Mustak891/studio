@@ -1,25 +1,21 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { ProfileData, LinkData } from '@/lib/types';
 import ProfileEditor from '@/components/linkhub/ProfileEditor';
 import LinkListEditor from '@/components/linkhub/LinkListEditor';
 import LivePreview from '@/components/linkhub/LivePreview';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle } from 'lucide-react';
+import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase'; // Import Firestore instance
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-const APP_NAME = "LinkHub"; // Used for localStorage keys
-const LOCAL_STORAGE_KEY_PROFILE_PREFIX = `${APP_NAME}_profileData_`;
-const LOCAL_STORAGE_KEY_LINKS_PREFIX = `${APP_NAME}_links_`;
+const APP_NAME = "LinkHub";
 const LOCAL_STORAGE_KEY_THEME = `${APP_NAME}_theme`;
-
-// Public data keys
-const PUBLIC_PROFILE_KEY_PREFIX = `${APP_NAME}_public_profile_`;
-const PUBLIC_LINKS_KEY_PREFIX = `${APP_NAME}_public_links_`;
 
 const initialProfileData: ProfileData = {
   username: 'yourname',
@@ -39,10 +35,9 @@ export default function HomePage() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isMounted, setIsMounted] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const userProfileKey = user ? `${LOCAL_STORAGE_KEY_PROFILE_PREFIX}${user.uid}` : null;
-  const userLinksKey = user ? `${LOCAL_STORAGE_KEY_LINKS_PREFIX}${user.uid}` : null;
 
   useEffect(() => {
     const storedTheme = localStorage.getItem(LOCAL_STORAGE_KEY_THEME) as 'light' | 'dark' | null;
@@ -59,51 +54,81 @@ export default function HomePage() {
     localStorage.setItem(LOCAL_STORAGE_KEY_THEME, theme);
   }, [theme, isMounted]);
 
+  // Load data from Firestore when user logs in
   useEffect(() => {
-    if (!isMounted || !user || !userProfileKey || !userLinksKey) return;
+    if (!isMounted || !user || !db) return;
 
-    const storedProfile = localStorage.getItem(userProfileKey);
-    if (storedProfile) {
-      setProfileData(JSON.parse(storedProfile));
-    } else {
-      setProfileData({
-        ...initialProfileData,
-        username: user.displayName || 'yourname',
-        profilePictureUrl: user.photoURL || 'https://placehold.co/150x150.png'
+    const loadUserData = async () => {
+      setFirestoreError(null);
+      const userDocRef = doc(db, 'users', user.uid);
+      try {
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProfileData(data.profile || { 
+            ...initialProfileData,
+            username: user.displayName || 'yourname',
+            profilePictureUrl: user.photoURL || 'https://placehold.co/150x150.png'
+          });
+          setLinks(data.links || initialLinks);
+        } else {
+          // New user, set initial data and save to Firestore
+          const newProfile = {
+            ...initialProfileData,
+            username: user.displayName || 'yourname',
+            profilePictureUrl: user.photoURL || 'https://placehold.co/150x150.png'
+          };
+          setProfileData(newProfile);
+          setLinks(initialLinks);
+          await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
+        }
+      } catch (error: any) {
+        console.error("Error loading user data from Firestore:", error);
+        setFirestoreError(`Failed to load data: ${error.message}. Ensure Firestore is set up and rules allow reads.`);
+        toast({ title: "Load Error", description: "Could not load your data from the cloud.", variant: "destructive"});
+      }
+    };
+    loadUserData();
+  }, [user, isMounted, db]);
+
+
+  const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
+    if (!user || !db || !isMounted) return;
+    setIsSaving(true);
+    setFirestoreError(null);
+    const userDocRef = doc(db, 'users', user.uid);
+    try {
+      // Use setDoc with merge:true to create or update, or updateDoc if sure it exists.
+      // Using updateDoc assumes the document already exists. Let's use setDoc with merge for safety.
+      await setDoc(userDocRef, { profile: newProfileData, links: newLinks }, { merge: true });
+      toast({
+        title: "Changes Saved!",
+        description: "Your LinkHub profile and links are saved to the cloud.",
       });
+    } catch (error: any) {
+      console.error("Error saving data to Firestore:", error);
+      setFirestoreError(`Failed to save data: ${error.message}. Check Firestore rules and connectivity.`);
+      toast({
+        title: "Save Error",
+        description: `Could not save changes to the cloud. Error: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
+  }, [user, db, toast, isMounted]);
+
+  // Auto-save profile data (debounced or direct based on preference)
+   useEffect(() => {
+    if (!user || !isMounted || profileData === initialProfileData) return; // Avoid saving initial default state unnecessarily
+    // Basic check to avoid saving if profileData hasn't changed from what might have been loaded or initialized
+    if (JSON.stringify(profileData) === JSON.stringify(initialProfileData) && links === initialLinks) return;
     
-    const storedLinks = localStorage.getItem(userLinksKey);
-    if (storedLinks) {
-      setLinks(JSON.parse(storedLinks));
-    } else {
-      setLinks(initialLinks);
-    }
-  }, [user, isMounted, userProfileKey, userLinksKey]);
+    // Auto-save can be too frequent. Let's rely on the Save button for now,
+    // or implement a debounce if auto-save is desired.
+    // For simplicity in this change, we'll use explicit save button.
+   }, [profileData, links, user, isMounted, saveDataToFirestore]);
 
-  useEffect(() => {
-    if (!isMounted || !user || !userProfileKey) return;
-    localStorage.setItem(userProfileKey, JSON.stringify(profileData));
-
-    // Save public version based on username
-    if (profileData.username) {
-      const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
-      const publicProfileLsKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
-      localStorage.setItem(publicProfileLsKey, JSON.stringify(profileData));
-    }
-  }, [profileData, user, isMounted, userProfileKey]);
-
-  useEffect(() => {
-    if (!isMounted || !user || !userLinksKey) return;
-    localStorage.setItem(userLinksKey, JSON.stringify(links));
-
-    // Save public version based on username (requires profileData.username for key)
-    if (profileData.username) {
-      const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
-      const publicLinksLsKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
-      localStorage.setItem(publicLinksLsKey, JSON.stringify(links));
-    }
-  }, [links, profileData.username, user, isMounted, userLinksKey]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -114,21 +139,13 @@ export default function HomePage() {
       toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive"});
       return;
     }
-    // Data is saved to localStorage on change via useEffects.
-    // This also ensures public data is saved if username is present.
-    if (profileData.username) {
-        const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
-        const publicProfileLsKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
-        const publicLinksLsKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
-        localStorage.setItem(publicProfileLsKey, JSON.stringify(profileData));
-        localStorage.setItem(publicLinksLsKey, JSON.stringify(links));
+    if (!db) {
+      toast({ title: "Database Error", description: "Firestore is not available. Cannot save.", variant: "destructive"});
+      return;
     }
-    toast({
-      title: "Changes Saved!",
-      description: "Your LinkHub profile and links are up-to-date locally.",
-    });
+    saveDataToFirestore(profileData, links);
   };
-
+  
   const handleShare = async () => {
     if (!user) {
       toast({ title: "Not Signed In", description: "Please sign in to share your page.", variant: "destructive"});
@@ -136,9 +153,8 @@ export default function HomePage() {
     }
 
     const shareUsername = profileData.username || initialProfileData.username;
-    // Ensure slug is always non-empty, default to "yourpage"
-    const usernameSlug = (shareUsername.replace(/\s+/g, '-').toLowerCase() || "yourpage").trim();
-    const finalSlug = usernameSlug || "yourpage"; // Final fallback if somehow still empty
+    const usernameSlug = (shareUsername.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase() || "yourpage").trim();
+    const finalSlug = usernameSlug || "yourpage"; 
 
     const shareUrl = `${window.location.origin}/u/${finalSlug}`;
 
@@ -146,11 +162,11 @@ export default function HomePage() {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
         toast({
           title: "Clipboard API Not Available",
-          description: `Your browser does not support copying to clipboard. Here's your link to copy manually: ${shareUrl}`,
-          variant: "destructive",
+          description: `Your browser does not support copying to clipboard. Here's your link: ${shareUrl}`,
+          variant: "default",
           duration: 10000, 
         });
-        console.error('Share: Clipboard API not available or writeText is not a function.');
+        console.warn('Share: Clipboard API not available. Link:', shareUrl);
         return;
       }
 
@@ -159,10 +175,10 @@ export default function HomePage() {
         title: "Link Copied!",
         description: `Your LinkHub URL (${shareUrl}) is copied to clipboard.`,
       });
-    } catch (err) {
+    } catch (err: any) {
       toast({
         title: "Failed to Copy",
-        description: `Could not copy the link. Please try manually: ${shareUrl}`,
+        description: `Could not copy the link: ${err.message}. Please try manually: ${shareUrl}`,
         variant: "destructive",
         duration: 10000,
       });
@@ -193,14 +209,15 @@ export default function HomePage() {
             </Button>
             {user ? (
               <>
-                <Button onClick={handleSaveChanges} variant="outline">
-                  <Save className="mr-2 h-4 w-4" /> Save Changes
+                <Button onClick={handleSaveChanges} disabled={isSaving || !!firestoreError}>
+                  <Save className={`mr-2 h-4 w-4 ${isSaving ? 'animate-spin' : ''}`} /> 
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
                 <Button onClick={handleShare}>
                   <Share2 className="mr-2 h-4 w-4" /> Share
                 </Button>
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar"/>
+                   <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar"/>
                   <AvatarFallback>
                     {user.displayName ? user.displayName.charAt(0).toUpperCase() : <UserCircle size={20}/>}
                   </AvatarFallback>
@@ -228,6 +245,12 @@ export default function HomePage() {
         </main>
       ) : (
         <main className="flex-grow container mx-auto py-8 px-4 sm:px-6 lg:px-8 max-w-screen-2xl">
+          {firestoreError && (
+            <div className="mb-4 p-4 border border-destructive/50 bg-destructive/10 text-destructive rounded-md flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> 
+              <p><strong>Storage Error:</strong> {firestoreError} Ensure Firebase Firestore is enabled and security rules are correctly configured. See console for details.</p>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
             <div className="lg:col-span-2 space-y-8">
               <ProfileEditor profileData={profileData} onProfileChange={setProfileData} />
@@ -246,5 +269,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    

@@ -1,0 +1,40 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // Authenticated user can read and write their own document.
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Anyone can read a user's document (needed for public profile pages).
+      // This rule allows the /u/[username] page to fetch the profile data
+      // after it has identified the correct document via a query.
+      allow get: if true;
+    }
+
+    // Allow querying the 'users' collection.
+    // This is necessary for the /u/[username] page to find a user by their 'profile.username'.
+    // WARNING: This rule is currently permissive and allows listing documents from the 'users' collection.
+    // For a production application, this 'list' rule MUST be significantly tightened
+    // to prevent unintended data exposure. You might restrict it to specific queries
+    // or use a separate collection for public username lookups with stricter rules.
+    // Example of a slightly more restrictive list rule (still needs careful testing):
+    // allow list: if request.query.limit <= 10 && (request.query.resource.__name__ == null || request.query.resource.data.profile.username != null);
+    match /users/{document=**} { // This applies to the 'users' collection itself for list operations.
+      allow list: if true; 
+    }
+  }
+}
+// IMPORTANT: The Firestore rules above are very permissive for development.
+// In a production environment, you MUST tighten these rules significantly.
+// Specifically, the 'allow list: if true;' on the 'users' collection can expose data
+// if not coupled with strong client-side query validation or more specific server-side rules.
+// Consider:
+// 1. Restricting list operations to authenticated users or specific query patterns.
+// 2. Using a separate 'publicUsernames' collection to map usernames to UIDs for safer public lookups.
+// 3. Implementing Cloud Functions to handle public data fetching with more granular control.
+// ALWAYS test your Firestore rules thoroughly using the Firebase console simulator.
+    

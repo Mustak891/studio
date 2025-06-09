@@ -5,19 +5,16 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import type { ProfileData, LinkData } from '@/lib/types';
 import LivePreview from '@/components/linkhub/LivePreview';
-import { Button } from '@/components/ui/button'; // For a back button or link
-import { Home } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Home, AlertTriangle } from 'lucide-react';
+import { db } from '@/lib/firebase'; // Import Firestore instance
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
-const SHARED_APP_NAME = "LinkHub"; // Must match APP_NAME in src/app/page.tsx for localStorage keys
-
-// Public data key prefixes (must match those in src/app/page.tsx)
-const PUBLIC_PROFILE_KEY_PREFIX = `${SHARED_APP_NAME}_public_profile_`;
-const PUBLIC_LINKS_KEY_PREFIX = `${SHARED_APP_NAME}_public_links_`;
+const SHARED_APP_NAME = "LinkHub";
 
 export default function UserPublicPage() {
   const params = useParams();
-  // Ensure usernameSlug is always lowercase for consistent localStorage key lookup
-  const usernameSlug = params.username ? (params.username as string).toLowerCase() : "";
+  const usernameSlugFromParam = params.username ? (params.username as string).toLowerCase() : "";
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [links, setLinks] = useState<LinkData[] | null>(null);
@@ -30,37 +27,50 @@ export default function UserPublicPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || !db) {
+      if (isMounted && !db) {
+        setError("Firestore is not available. Cannot load profile.");
+        setLoading(false);
+      }
+      return;
+    }
 
-    if (!usernameSlug) {
+    if (!usernameSlugFromParam) {
       setError("Username not found in URL.");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    try {
-      // usernameSlug is already lowercased above
-      const publicProfileKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
-      const publicLinksKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
+    const fetchUserProfile = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Query for user document where profile.username matches the slug
+        const usersRef = collection(db, "users");
+        // Ensure usernameSlugFromParam is a string and not an array
+        const usernameToQuery = Array.isArray(usernameSlugFromParam) ? usernameSlugFromParam[0] : usernameSlugFromParam;
+        
+        const q = query(usersRef, where("profile.username", "==", usernameToQuery), limit(1));
+        const querySnapshot = await getDocs(q);
 
-      const storedProfile = localStorage.getItem(publicProfileKey);
-      const storedLinks = localStorage.getItem(publicLinksKey);
-
-      if (storedProfile && storedLinks) {
-        setProfileData(JSON.parse(storedProfile));
-        setLinks(JSON.parse(storedLinks));
-        setError(null); 
-      } else {
-        setError(`Profile for "${usernameSlug}" not found in your local browser storage. This page can only be viewed if the profile was created or saved using this browser. For true public sharing, a database backend would be needed.`);
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          const userData = userDoc.data();
+          setProfileData(userData.profile as ProfileData);
+          setLinks(userData.links as LinkData[]);
+        } else {
+          setError(`Profile for "${usernameToQuery}" not found. This user may not exist or hasn't set up their LinkHub page yet.`);
+        }
+      } catch (e: any) {
+        console.error("Error loading public profile from Firestore:", e);
+        setError(`Could not load profile data. Error: ${e.message}. This might be due to Firestore security rules or network issues.`);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error("Error loading public profile from localStorage:", e);
-      setError("Could not load profile data due to an unexpected error.");
-    } finally {
-      setLoading(false);
-    }
-  }, [usernameSlug, isMounted]);
+    };
+
+    fetchUserProfile();
+  }, [usernameSlugFromParam, isMounted, db]);
 
   if (!isMounted || loading) {
     return (
@@ -78,6 +88,7 @@ export default function UserPublicPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center px-6 py-12">
         <div className="bg-card p-8 rounded-lg shadow-xl max-w-md w-full">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-destructive mb-4">Profile Not Found</h1>
           <p className="text-muted-foreground mb-8 whitespace-pre-line">{error || "The requested profile could not be loaded."}</p>
           <Button asChild>
@@ -102,4 +113,3 @@ export default function UserPublicPage() {
     </div>
   );
 }
-
