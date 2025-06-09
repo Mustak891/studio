@@ -3,78 +3,83 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --background: 180 100% 93.9%; /* #E0FFFF Very Light Cyan */
+    --foreground: 190 30% 20%; /* Dark muted cyan/blue for text */
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 190 30% 20%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --popover-foreground: 190 30% 20%;
+    --primary: 181 100% 74.7%; /* #7DF9FF Electric Blue */
+    --primary-foreground: 181 60% 25%; /* Darker blue for text on primary */
+    --secondary: 180 50% 88%; /* Lighter cyan for secondary elements */
+    --secondary-foreground: 181 60% 25%;
+    --muted: 180 30% 85%; /* Muted cyan */
+    --muted-foreground: 180 30% 45%;
+    --accent: 81 85% 71.2%; /* #BEF574 Soft Lime Green */
+    --accent-foreground: 81 60% 20%; /* Darker green for text on accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --border: 180 50% 80%; /* Light cyan border */
+    --input: 180 50% 80%;
+    --ring: 181 100% 74.7%; /* Electric blue for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Sidebar specific theme vars - can be same as main or different */
+    --sidebar-background: 180 60% 90%; /* Slightly different from main bg */
+    --sidebar-foreground: 190 30% 15%;
+    --sidebar-primary: 181 100% 74.7%;
+    --sidebar-primary-foreground: 181 60% 25%;
+    --sidebar-accent: 81 85% 71.2%;
+    --sidebar-accent-foreground: 81 60% 20%;
+    --sidebar-border: 180 50% 75%;
+    --sidebar-ring: 181 100% 74.7%;
   }
+
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --background: 190 30% 10%; /* Dark deep blue */
+    --foreground: 180 100% 93.9%; /* #E0FFFF Light cyan text */
+    --card: 190 30% 15%; /* Slightly lighter dark blue for cards */
+    --card-foreground: 180 100% 93.9%;
+    --popover: 190 30% 15%;
+    --popover-foreground: 180 100% 93.9%;
+    --primary: 181 100% 74.7%; /* Electric Blue */
+    --primary-foreground: 181 60% 25%; /* Darker blue for text on primary */
+    --secondary: 190 30% 20%; /* Darker secondary elements */
+    --secondary-foreground: 180 100% 93.9%;
+    --muted: 190 30% 25%;
+    --muted-foreground: 180 50% 70%;
+    --accent: 81 85% 71.2%; /* Soft Lime Green */
+    --accent-foreground: 81 60% 20%; /* Darker green for text on accent */
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 190 30% 25%; /* Dark border */
+    --input: 190 30% 25%;
+    --ring: 181 100% 74.7%; /* Electric blue for focus rings */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Sidebar specific theme vars - dark mode */
+    --sidebar-background: 190 30% 8%; 
+    --sidebar-foreground: 180 80% 90%;
+    --sidebar-primary: 181 100% 74.7%;
+    --sidebar-primary-foreground: 181 60% 25%;
+    --sidebar-accent: 81 85% 71.2%;
+    --sidebar-accent-foreground: 81 60% 20%;
+    --sidebar-border: 190 30% 20%;
+    --sidebar-ring: 181 100% 74.7%;
   }
 }
 
@@ -85,4 +90,21 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--accent));
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--accent-foreground));
 }
