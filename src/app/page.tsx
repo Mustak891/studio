@@ -70,63 +70,78 @@ export default function HomePage() {
   }, [theme, isMounted]);
 
   useEffect(() => {
-    if (!isMounted || !user || !db) {
+    if (!isMounted || !db) {
       if (user === null && !authLoading) { 
-        console.log("HomePage: User logged out or not yet loaded, resetting local editor state.");
+        console.log("[HomePage-UserDataEffect]: User logged out or component not fully ready (isMounted/db). Resetting local editor state.");
         setProfileData(generateInitialProfileData());
         setLinks(initialLinks);
       }
       return;
     }
+
+    if (authLoading) {
+      console.log("[HomePage-UserDataEffect]: Auth is loading. Waiting for auth state to settle.");
+      return; 
+    }
+
+    if (!user) {
+      console.log("[HomePage-UserDataEffect]: No authenticated user. Resetting local editor state.");
+      setProfileData(generateInitialProfileData());
+      setLinks(initialLinks);
+      return;
+    }
     
     const loadUserData = async () => {
-      console.log("HomePage: Attempting to load user data for UID:", user.uid);
+      console.log("[HomePage-UserDataEffect]: Auth state settled. User authenticated (UID:", user.uid,"). Attempting to load user data.");
       setFirestoreError(null);
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          console.log("HomePage: User data found in Firestore:", data);
+          console.log("[HomePage-UserDataEffect]: User data FOUND in Firestore for UID:", user.uid, data);
           const loadedProfile = data.profile as ProfileData;
           const currentUsername = slugifyUsername(loadedProfile.username || user.displayName || 'yourname');
           setProfileData({
             ...loadedProfile,
-            username: currentUsername,
+            username: currentUsername, // Ensure username is slugified
             profilePictureUrl: loadedProfile.profilePictureUrl || user.photoURL || 'https://placehold.co/150x150.png'
           });
           setLinks(data.links || initialLinks);
         } else {
-          // Only create a new profile if it looks like a truly new user sign-up.
+          console.log("[HomePage-UserDataEffect]: User data NOT FOUND in Firestore for UID:", user.uid,". Checking if user is new.");
+          // Check if user is genuinely new vs. data deleted
           const creationTime = user.metadata.creationTime ? new Date(user.metadata.creationTime).getTime() : 0;
           const lastSignInTime = user.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime).getTime() : 0;
           
           // If creation time and last sign-in time are very close (e.g., within 10 seconds),
           // it's likely a fresh sign-up or first sign-in after account creation.
-          // Otherwise, if the doc is missing, we assume it was intentionally deleted or shouldn't be auto-recreated.
-          if (creationTime && lastSignInTime && Math.abs(creationTime - lastSignInTime) < 10000) { // 10 seconds threshold
-            console.log("HomePage: No data in Firestore for UID:", user.uid, "AND user appears to be new. Generating and saving initial profile.");
+          const isLikelyNewUser = creationTime && lastSignInTime && Math.abs(creationTime - lastSignInTime) < 10000;
+
+          if (isLikelyNewUser) {
+            console.log("[HomePage-UserDataEffect]: User (UID:", user.uid,") appears to be NEW. Generating and saving initial profile to Firestore.");
             const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
-            setProfileData(newProfile);
-            setLinks(initialLinks);
-            // Save this initial profile to Firestore
-            console.log("HomePage: Saving new initial profile to Firestore for UID:", user.uid, newProfile);
+            setProfileData(newProfile); // Update local state
+            setLinks(initialLinks); // Update local state
             await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
+            console.log("[HomePage-UserDataEffect]: Initial profile for new user (UID:", user.uid,") SAVED to Firestore.");
             toast({ title: "Profile Initialized", description: "Your LinkHub profile has been set up in the cloud." });
           } else {
-            console.log("HomePage: No data in Firestore for UID:", user.uid, "User does not appear to be new (or metadata missing). Not creating initial profile. This might be after a deletion or if data was cleared externally. Resetting local editor state.");
+            console.log("[HomePage-UserDataEffect]: No data in Firestore for UID:", user.uid, "User does NOT appear to be new (or metadata missing/timestamps far apart). This might be after a deletion or if data was cleared externally. Resetting local editor state WITHOUT saving to Firestore.");
             setProfileData(generateInitialProfileData(user.displayName, user.photoURL));
             setLinks(initialLinks);
           }
         }
       } catch (error: any) {
-        console.error("HomePage: Error loading user data from Firestore:", error);
+        console.error("[HomePage-UserDataEffect]: Error loading user data from Firestore for UID:", user.uid, error);
         setFirestoreError(`Failed to load data: ${error.message}. Ensure Firestore is set up and rules allow reads.`);
         toast({ title: "Load Error", description: `Could not load your data from the cloud. ${error.message}`, variant: "destructive"});
       }
     };
+
     loadUserData();
-  }, [user, isMounted, db, authLoading, toast]);
+
+  }, [user, isMounted, db, authLoading, toast]); // Added authLoading
 
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
     if (!user || !db || !isMounted) {
@@ -141,23 +156,23 @@ export default function HomePage() {
     
     const profileToSave: ProfileData = {
       ...newProfileData,
-      username: slugifyUsername(newProfileData.username) 
+      username: slugifyUsername(newProfileData.username) // Ensure username is slugified on save
     };
-    console.log("[SaveData]: Profile object being saved:", profileToSave);
-    console.log("[SaveData]: Links object being saved:", newLinks);
+    console.log("[SaveData]: Profile object being saved to Firestore:", profileToSave);
+    console.log("[SaveData]: Links object being saved to Firestore:", newLinks);
 
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
       setProfileData(profileToSave); 
       setLinks(newLinks); 
-      console.log("[SaveData]: Data successfully saved to Firestore for UID:", user.uid);
+      console.log("[SaveData]: Data successfully SAVED to Firestore for UID:", user.uid);
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
       });
     } catch (error: any) {
-      console.error("[SaveData]: Error saving data to Firestore for UID:", user.uid, error);
+      console.error("[SaveData]: Error SAVING data to Firestore for UID:", user.uid, error);
       setFirestoreError(`Failed to save data: ${error.message}. Check Firestore rules and connectivity.`);
       toast({
         title: "Save Error",
@@ -174,7 +189,7 @@ export default function HomePage() {
   };
 
   const handleSaveChanges = () => {
-    console.log("[HandleSaveChanges]: Triggered for user:", user ? user.uid : "No user");
+    console.log("[HandleSaveChanges]: Triggered. Current User UID:", user ? user.uid : "No user");
     if (!user) {
       toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive"});
       return;
@@ -231,11 +246,14 @@ export default function HomePage() {
     }
     setIsDeleting(true);
     setFirestoreError(null); // Clear previous firestore errors
-    await deleteUserAccount(); // AuthContext handles UI updates and toasts based on success/failure
-    setIsDeleting(false);
+    console.log("[HandleDeleteAccountConfirm]: Calling deleteUserAccount from AuthContext for UID:", user.uid);
+    await deleteUserAccount(); 
+    // AuthContext handles UI updates and toasts based on success/failure of deletion.
+    // It will also set its own loading state, which should lead to onAuthStateChanged.
+    setIsDeleting(false); // Reset local deleting state after operation attempt
   };
   
-  if (!isMounted || authLoading) {
+  if (!isMounted || authLoading) { // Show loading if component isn't mounted OR auth is still loading
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <svg className="animate-spin h-10 w-10 text-primary mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
