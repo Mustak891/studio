@@ -12,11 +12,14 @@ import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle } from 'lucide-react
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
-const APP_NAME = "LinkHub";
+const APP_NAME = "LinkHub"; // Used for localStorage keys
 const LOCAL_STORAGE_KEY_PROFILE_PREFIX = `${APP_NAME}_profileData_`;
 const LOCAL_STORAGE_KEY_LINKS_PREFIX = `${APP_NAME}_links_`;
 const LOCAL_STORAGE_KEY_THEME = `${APP_NAME}_theme`;
 
+// Public data keys
+const PUBLIC_PROFILE_KEY_PREFIX = `${APP_NAME}_public_profile_`;
+const PUBLIC_LINKS_KEY_PREFIX = `${APP_NAME}_public_links_`;
 
 const initialProfileData: ProfileData = {
   username: 'yourname',
@@ -38,19 +41,16 @@ export default function HomePage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const { toast } = useToast();
 
-  // Derive user-specific localStorage keys
   const userProfileKey = user ? `${LOCAL_STORAGE_KEY_PROFILE_PREFIX}${user.uid}` : null;
   const userLinksKey = user ? `${LOCAL_STORAGE_KEY_LINKS_PREFIX}${user.uid}` : null;
 
-
   useEffect(() => {
-    // Load theme from localStorage on mount
     const storedTheme = localStorage.getItem(LOCAL_STORAGE_KEY_THEME) as 'light' | 'dark' | null;
     if (storedTheme) {
       setTheme(storedTheme);
     }
     setCurrentYear(new Date().getFullYear());
-    setIsMounted(true); // This marks that client-side logic can now run
+    setIsMounted(true);
   }, []);
 
   useEffect(() => {
@@ -62,12 +62,10 @@ export default function HomePage() {
   useEffect(() => {
     if (!isMounted || !user || !userProfileKey || !userLinksKey) return;
 
-    // Load user-specific data from localStorage
     const storedProfile = localStorage.getItem(userProfileKey);
     if (storedProfile) {
       setProfileData(JSON.parse(storedProfile));
     } else {
-      // If no stored profile for this user, reset to initial or a user-specific default
       setProfileData({
         ...initialProfileData,
         username: user.displayName || 'yourname',
@@ -79,21 +77,33 @@ export default function HomePage() {
     if (storedLinks) {
       setLinks(JSON.parse(storedLinks));
     } else {
-      setLinks(initialLinks); // Or an empty array, or user-specific initial links
+      setLinks(initialLinks);
     }
   }, [user, isMounted, userProfileKey, userLinksKey]);
-
 
   useEffect(() => {
     if (!isMounted || !user || !userProfileKey) return;
     localStorage.setItem(userProfileKey, JSON.stringify(profileData));
+
+    // Save public version based on username
+    if (profileData.username) {
+      const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
+      const publicProfileLsKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
+      localStorage.setItem(publicProfileLsKey, JSON.stringify(profileData));
+    }
   }, [profileData, user, isMounted, userProfileKey]);
 
   useEffect(() => {
     if (!isMounted || !user || !userLinksKey) return;
     localStorage.setItem(userLinksKey, JSON.stringify(links));
-  }, [links, user, isMounted, userLinksKey]);
 
+    // Save public version based on username (requires profileData.username for key)
+    if (profileData.username) {
+      const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
+      const publicLinksLsKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
+      localStorage.setItem(publicLinksLsKey, JSON.stringify(links));
+    }
+  }, [links, profileData.username, user, isMounted, userLinksKey]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -104,7 +114,15 @@ export default function HomePage() {
       toast({ title: "Not Signed In", description: "Please sign in to save changes.", variant: "destructive"});
       return;
     }
-    // Data is saved to localStorage on change. This button is more for user feedback.
+    // Data is saved to localStorage on change via useEffects.
+    // This also ensures public data is saved if username is present.
+    if (profileData.username) {
+        const usernameSlug = profileData.username.replace(/\s+/g, '-').toLowerCase();
+        const publicProfileLsKey = `${PUBLIC_PROFILE_KEY_PREFIX}${usernameSlug}`;
+        const publicLinksLsKey = `${PUBLIC_LINKS_KEY_PREFIX}${usernameSlug}`;
+        localStorage.setItem(publicProfileLsKey, JSON.stringify(profileData));
+        localStorage.setItem(publicLinksLsKey, JSON.stringify(links));
+    }
     toast({
       title: "Changes Saved!",
       description: "Your LinkHub profile and links are up-to-date locally.",
@@ -112,15 +130,17 @@ export default function HomePage() {
   };
 
   const handleShare = async () => {
-    // Ensure user is available, though button rendering should already guard this.
     if (!user) {
       toast({ title: "Not Signed In", description: "Please sign in to share your page.", variant: "destructive"});
       return;
     }
 
     const shareUsername = profileData.username || initialProfileData.username;
-    const usernameSlug = shareUsername.replace(/\s+/g, '-').toLowerCase() || "yourpage";
-    const shareUrl = `${window.location.origin}/u/${usernameSlug}`;
+    // Ensure slug is always non-empty, default to "yourpage"
+    const usernameSlug = (shareUsername.replace(/\s+/g, '-').toLowerCase() || "yourpage").trim();
+    const finalSlug = usernameSlug || "yourpage"; // Final fallback if somehow still empty
+
+    const shareUrl = `${window.location.origin}/u/${finalSlug}`;
 
     try {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -180,7 +200,7 @@ export default function HomePage() {
                   <Share2 className="mr-2 h-4 w-4" /> Share
                 </Button>
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar" />
+                  <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar"/>
                   <AvatarFallback>
                     {user.displayName ? user.displayName.charAt(0).toUpperCase() : <UserCircle size={20}/>}
                   </AvatarFallback>
@@ -214,7 +234,7 @@ export default function HomePage() {
               <LinkListEditor links={links} onLinksChange={setLinks} />
             </div>
             <div className="lg:col-span-1 lg:sticky lg:top-24 self-start max-h-[calc(100vh-8rem)]">
-              <LivePreview profileData={profileData} links={links} />
+              <LivePreview profileData={profileData} links={links} showTitle={true} />
             </div>
           </div>
         </main>
@@ -226,3 +246,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    

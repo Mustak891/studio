@@ -4,46 +4,43 @@
 import type { ProfileData, LinkData } from '@/lib/types';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card'; 
-import { Link as LinkIconLucide, User } from 'lucide-react'; 
+import { Card } from '@/components/ui/card'; 
 import NextImage from 'next/image'; 
 
 interface LivePreviewProps {
   profileData: ProfileData;
   links: LinkData[];
+  showTitle?: boolean; // New prop to control visibility of the "Live Preview" title
 }
 
-export default function LivePreview({ profileData, links }: LivePreviewProps) {
-  // Check if profilePictureUrl is a non-empty string after trimming
+export default function LivePreview({ profileData, links, showTitle = true }: LivePreviewProps) {
   const isValidUrl = typeof profileData.profilePictureUrl === 'string' && profileData.profilePictureUrl.trim() !== '';
 
   return (
     <Card className="shadow-xl overflow-hidden h-full flex flex-col">
-      <div className="bg-gradient-to-br from-primary to-accent p-4 text-center">
-        <h2 className="text-2xl font-bold text-primary-foreground font-headline">Live Preview</h2>
-      </div>
+      {showTitle && (
+        <div className="bg-gradient-to-br from-primary to-accent p-4 text-center">
+          <h2 className="text-2xl font-bold text-primary-foreground font-headline">Live Preview</h2>
+        </div>
+      )}
       
-      <div className="flex-grow p-2 sm:p-4 bg-muted/20 overflow-y-auto">
+      <div className={`flex-grow p-2 sm:p-4 ${showTitle ? 'bg-muted/20' : 'bg-transparent'} overflow-y-auto`}>
         <div className="max-w-md mx-auto bg-background rounded-xl shadow-2xl p-6 space-y-6 min-h-[400px] flex flex-col items-center">
           <Avatar className="h-24 w-24 ring-4 ring-primary ring-offset-background ring-offset-2">
             {isValidUrl ? (
               <NextImage 
-                src={profileData.profilePictureUrl.trim()} // Trim the URL before passing
+                src={profileData.profilePictureUrl.trim()}
                 alt={profileData.username || "Profile"} 
                 width={96} 
                 height={96} 
                 className="rounded-full object-cover"
                 data-ai-hint="profile avatar"
                 onError={(e) => {
-                  // This handler is for when the image resource fails to load (e.g., 404).
-                  // The "Invalid URL" error is caught by the `isValidUrl` check before this.
                   const imgElement = e.currentTarget;
-                  imgElement.style.display = 'none'; // Hide NextImage to let AvatarFallback show.
+                  imgElement.style.display = 'none'; 
                 }}
               />
             ) : null}
-            {/* AvatarFallback will be displayed if NextImage is not rendered (isValidUrl is false) 
-                or if NextImage fails to load and hides itself via onError. */}
             <AvatarFallback className="text-3xl bg-secondary text-secondary-foreground">
               {(profileData.username || "U").charAt(0).toUpperCase()}
             </AvatarFallback>
@@ -81,9 +78,12 @@ export default function LivePreview({ profileData, links }: LivePreviewProps) {
             )}
           </div>
           
-          <div className="mt-auto pt-6 text-center text-xs text-muted-foreground">
-            Powered by <span className="font-semibold text-primary">LinkHub</span>
-          </div>
+          {/* Footer only shown if the preview title is shown (i.e., in editor mode) */}
+          {showTitle && (
+            <div className="mt-auto pt-6 text-center text-xs text-muted-foreground">
+              Powered by <span className="font-semibold text-primary">LinkHub</span>
+            </div>
+          )}
         </div>
       </div>
     </Card>
