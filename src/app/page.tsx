@@ -11,16 +11,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/firebase'; // Import Firestore instance
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; 
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { slugifyUsername } from '@/lib/utils';
 
 const APP_NAME = "LinkHub";
 const LOCAL_STORAGE_KEY_THEME = `${APP_NAME}_theme`;
 
-const initialProfileData: ProfileData = {
-  username: 'yourname',
-  bio: 'Your awesome bio goes here!',
-  profilePictureUrl: 'https://placehold.co/150x150.png',
+const generateInitialProfileData = (displayName?: string | null, photoURL?: string | null): ProfileData => {
+  return {
+    username: slugifyUsername(displayName || 'yourname'),
+    bio: 'Your awesome bio goes here!',
+    profilePictureUrl: photoURL || 'https://placehold.co/150x150.png',
+  };
 };
 
 const initialLinks: LinkData[] = [
@@ -30,7 +33,7 @@ const initialLinks: LinkData[] = [
 
 export default function HomePage() {
   const { user, loading: authLoading, signInWithGoogle, signOutUser } = useAuth();
-  const [profileData, setProfileData] = useState<ProfileData>(initialProfileData);
+  const [profileData, setProfileData] = useState<ProfileData>(generateInitialProfileData());
   const [links, setLinks] = useState<LinkData[]>(initialLinks);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isMounted, setIsMounted] = useState(false);
@@ -54,7 +57,6 @@ export default function HomePage() {
     localStorage.setItem(LOCAL_STORAGE_KEY_THEME, theme);
   }, [theme, isMounted]);
 
-  // Load data from Firestore when user logs in
   useEffect(() => {
     if (!isMounted || !user || !db) return;
 
@@ -65,19 +67,16 @@ export default function HomePage() {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setProfileData(data.profile || { 
-            ...initialProfileData,
-            username: user.displayName || 'yourname',
-            profilePictureUrl: user.photoURL || 'https://placehold.co/150x150.png'
+          // Ensure loaded username is also a slug, or re-slugify if it's from an old format
+          const loadedProfile = data.profile as ProfileData;
+          setProfileData({
+            ...loadedProfile,
+            username: slugifyUsername(loadedProfile.username || user.displayName || 'yourname'),
+            profilePictureUrl: loadedProfile.profilePictureUrl || user.photoURL || 'https://placehold.co/150x150.png'
           });
           setLinks(data.links || initialLinks);
         } else {
-          // New user, set initial data and save to Firestore
-          const newProfile = {
-            ...initialProfileData,
-            username: user.displayName || 'yourname',
-            profilePictureUrl: user.photoURL || 'https://placehold.co/150x150.png'
-          };
+          const newProfile = generateInitialProfileData(user.displayName, user.photoURL);
           setProfileData(newProfile);
           setLinks(initialLinks);
           await setDoc(userDocRef, { profile: newProfile, links: initialLinks });
@@ -91,16 +90,21 @@ export default function HomePage() {
     loadUserData();
   }, [user, isMounted, db]);
 
-
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
     if (!user || !db || !isMounted) return;
     setIsSaving(true);
     setFirestoreError(null);
+    
+    // Ensure username in profile data is slugified before saving
+    const profileToSave = {
+      ...newProfileData,
+      username: slugifyUsername(newProfileData.username)
+    };
+
     const userDocRef = doc(db, 'users', user.uid);
     try {
-      // Use setDoc with merge:true to create or update, or updateDoc if sure it exists.
-      // Using updateDoc assumes the document already exists. Let's use setDoc with merge for safety.
-      await setDoc(userDocRef, { profile: newProfileData, links: newLinks }, { merge: true });
+      await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
+      setProfileData(profileToSave); // Update local state with the potentially re-slugified username
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
@@ -117,18 +121,6 @@ export default function HomePage() {
       setIsSaving(false);
     }
   }, [user, db, toast, isMounted]);
-
-  // Auto-save profile data (debounced or direct based on preference)
-   useEffect(() => {
-    if (!user || !isMounted || profileData === initialProfileData) return; // Avoid saving initial default state unnecessarily
-    // Basic check to avoid saving if profileData hasn't changed from what might have been loaded or initialized
-    if (JSON.stringify(profileData) === JSON.stringify(initialProfileData) && links === initialLinks) return;
-    
-    // Auto-save can be too frequent. Let's rely on the Save button for now,
-    // or implement a debounce if auto-save is desired.
-    // For simplicity in this change, we'll use explicit save button.
-   }, [profileData, links, user, isMounted, saveDataToFirestore]);
-
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -152,11 +144,9 @@ export default function HomePage() {
       return;
     }
 
-    const shareUsername = profileData.username || initialProfileData.username;
-    const usernameSlug = (shareUsername.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase() || "yourpage").trim();
-    const finalSlug = usernameSlug || "yourpage"; 
-
-    const shareUrl = `${window.location.origin}/u/${finalSlug}`;
+    // profileData.username should already be a valid slug
+    const shareUsername = profileData.username || 'myprofile'; 
+    const shareUrl = `${window.location.origin}/u/${shareUsername}`;
 
     try {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -219,7 +209,7 @@ export default function HomePage() {
                 <Avatar className="h-9 w-9">
                    <AvatarImage src={user.photoURL || profileData.profilePictureUrl || undefined} alt={user.displayName || 'User'} data-ai-hint="user avatar"/>
                   <AvatarFallback>
-                    {user.displayName ? user.displayName.charAt(0).toUpperCase() : <UserCircle size={20}/>}
+                    {profileData.username ? profileData.username.charAt(0).toUpperCase() : <UserCircle size={20}/>}
                   </AvatarFallback>
                 </Avatar>
                 <Button variant="outline" onClick={signOutUser}>
