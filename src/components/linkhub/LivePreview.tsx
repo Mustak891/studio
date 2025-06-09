@@ -1,11 +1,12 @@
+
 "use client";
 
 import type { ProfileData, LinkData } from '@/lib/types';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Link as LinkIconLucide, User } from 'lucide-react'; // Renamed to avoid conflict
-import NextImage from 'next/image'; // Using next/image for optimized images
+import { Card, CardContent } from '@/components/ui/card'; 
+import { Link as LinkIconLucide, User } from 'lucide-react'; 
+import NextImage from 'next/image'; 
 
 interface LivePreviewProps {
   profileData: ProfileData;
@@ -13,6 +14,9 @@ interface LivePreviewProps {
 }
 
 export default function LivePreview({ profileData, links }: LivePreviewProps) {
+  // Check if profilePictureUrl is a non-empty string after trimming
+  const isValidUrl = typeof profileData.profilePictureUrl === 'string' && profileData.profilePictureUrl.trim() !== '';
+
   return (
     <Card className="shadow-xl overflow-hidden h-full flex flex-col">
       <div className="bg-gradient-to-br from-primary to-accent p-4 text-center">
@@ -22,17 +26,24 @@ export default function LivePreview({ profileData, links }: LivePreviewProps) {
       <div className="flex-grow p-2 sm:p-4 bg-muted/20 overflow-y-auto">
         <div className="max-w-md mx-auto bg-background rounded-xl shadow-2xl p-6 space-y-6 min-h-[400px] flex flex-col items-center">
           <Avatar className="h-24 w-24 ring-4 ring-primary ring-offset-background ring-offset-2">
-            {profileData.profilePictureUrl ? (
+            {isValidUrl ? (
               <NextImage 
-                src={profileData.profilePictureUrl} 
+                src={profileData.profilePictureUrl.trim()} // Trim the URL before passing
                 alt={profileData.username || "Profile"} 
                 width={96} 
                 height={96} 
                 className="rounded-full object-cover"
                 data-ai-hint="profile avatar"
-                onError={(e) => (e.currentTarget.style.display = 'none')} // Hide if image fails to load
+                onError={(e) => {
+                  // This handler is for when the image resource fails to load (e.g., 404).
+                  // The "Invalid URL" error is caught by the `isValidUrl` check before this.
+                  const imgElement = e.currentTarget;
+                  imgElement.style.display = 'none'; // Hide NextImage to let AvatarFallback show.
+                }}
               />
             ) : null}
+            {/* AvatarFallback will be displayed if NextImage is not rendered (isValidUrl is false) 
+                or if NextImage fails to load and hides itself via onError. */}
             <AvatarFallback className="text-3xl bg-secondary text-secondary-foreground">
               {(profileData.username || "U").charAt(0).toUpperCase()}
             </AvatarFallback>
@@ -59,7 +70,6 @@ export default function LivePreview({ profileData, links }: LivePreviewProps) {
                 asChild
               >
                 <a href={link.url || '#'} target="_blank" rel="noopener noreferrer">
-                  {/* Minimalist icon can be added here if available for link type */}
                   {link.title || "Link"}
                 </a>
               </Button>
@@ -79,3 +89,5 @@ export default function LivePreview({ profileData, links }: LivePreviewProps) {
     </Card>
   );
 }
+
+    
