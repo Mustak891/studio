@@ -3,11 +3,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
-      // WARNING: TEMPORARILY OPEN FOR DEBUGGING
-      // Allows anyone to read and write to any user's document.
-      // This is NOT secure for production.
+      // DANGER: These are extremely permissive rules for debugging only.
+      // Anyone can read or write to any user's document with these rules.
+      // You MUST secure these (e.g., using request.auth.uid) before any production use.
       allow read: if true;
-      allow write: if true; 
+      allow write: if true;
     }
   }
 }
