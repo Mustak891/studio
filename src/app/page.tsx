@@ -111,22 +111,43 @@ export default function HomePage() {
     });
   };
 
-  const handleShare = () => {
-    const shareUsername = (user && profileData.username) || initialProfileData.username;
-    const shareUrl = `${window.location.origin}/u/${shareUsername.replace(/\s+/g, '-').toLowerCase() || "yourpage"}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
+  const handleShare = async () => {
+    // Ensure user is available, though button rendering should already guard this.
+    if (!user) {
+      toast({ title: "Not Signed In", description: "Please sign in to share your page.", variant: "destructive"});
+      return;
+    }
+
+    const shareUsername = profileData.username || initialProfileData.username;
+    const usernameSlug = shareUsername.replace(/\s+/g, '-').toLowerCase() || "yourpage";
+    const shareUrl = `${window.location.origin}/u/${usernameSlug}`;
+
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        toast({
+          title: "Clipboard API Not Available",
+          description: `Your browser does not support copying to clipboard. Here's your link to copy manually: ${shareUrl}`,
+          variant: "destructive",
+          duration: 10000, 
+        });
+        console.error('Share: Clipboard API not available or writeText is not a function.');
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
       toast({
         title: "Link Copied!",
         description: `Your LinkHub URL (${shareUrl}) is copied to clipboard.`,
       });
-    }).catch(err => {
+    } catch (err) {
       toast({
         title: "Failed to Copy",
-        description: "Could not copy the link. Please try manually.",
+        description: `Could not copy the link. Please try manually: ${shareUrl}`,
         variant: "destructive",
+        duration: 10000,
       });
-      console.error('Failed to copy: ', err);
-    });
+      console.error('Share: Failed to copy link to clipboard:', err);
+    }
   };
   
   if (!isMounted || authLoading) {
