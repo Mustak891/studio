@@ -3,8 +3,15 @@
 
 import type { User } from 'firebase/auth';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { auth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, type AuthError } from 'firebase/auth';
+import { auth, googleProvider, db } from '@/lib/firebase';
+import { 
+  signInWithPopup, 
+  signOut as firebaseSignOut, 
+  onAuthStateChanged, 
+  type AuthError,
+  deleteUser as firebaseDeleteUser 
+} from 'firebase/auth';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
@@ -12,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
+  deleteUserAccount: () => Promise<void>; // New function
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -134,8 +142,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const deleteUserAccount = async () => {
+    if (!auth || !auth.currentUser || !db) {
+      toast({ title: "Error", description: "Cannot delete account. Services not available.", variant: "destructive" });
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+    setLoading(true);
+
+    try {
+      // Step 1: Delete Firestore data
+      const userDocRef = doc(db, "users", currentUser.uid);
+      await deleteDoc(userDocRef);
+      console.log("User data deleted from Firestore for UID:", currentUser.uid);
+
+      // Step 2: Delete Firebase Auth user
+      await firebaseDeleteUser(currentUser);
+      toast({ title: "Account Deleted", description: "Your account and associated data have been successfully deleted." });
+      // Auth state change will automatically update UI (setUser(null), setLoading(false))
+    } catch (error: any) {
+      console.error("Error deleting user account:", error);
+      const authError = error as AuthError;
+      if (authError.code === 'auth/requires-recent-login') {
+        toast({
+          title: "Re-authentication Required",
+          description: "For security, please sign out, sign back in, and then try deleting your account again.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else if (error.message.includes("Firestore")) { // Heuristic for Firestore error
+         toast({
+          title: "Data Deletion Failed",
+          description: `Could not delete your data from the database. Your authentication account might still exist. Error: ${error.message}`,
+          variant: "destructive",
+        });
+      }
+      else {
+        toast({
+          title: "Deletion Failed",
+          description: `Could not delete your account. Error: ${authError.message}`,
+          variant: "destructive",
+        });
+      }
+      // If only Firestore deletion failed but auth deletion was attempted, user might be in an inconsistent state.
+      // For simplicity, we don't automatically sign out here if auth deletion failed.
+      // If auth deletion succeeded but Firestore failed, user is already signed out by onAuthStateChanged.
+      setLoading(false); // Ensure loading is set to false on error
+    }
+    // setLoading(false) will be handled by onAuthStateChanged if user deletion was successful
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOutUser }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOutUser, deleteUserAccount }}>
       {children}
     </AuthContext.Provider>
   );
@@ -148,4 +208,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

@@ -8,7 +8,18 @@ import LinkListEditor from '@/components/linkhub/LinkListEditor';
 import LivePreview from '@/components/linkhub/LivePreview';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Moon, Sun, Save, Share2, LogIn, LogOut, UserCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase'; 
@@ -32,13 +43,14 @@ const initialLinks: LinkData[] = [
 ];
 
 export default function HomePage() {
-  const { user, loading: authLoading, signInWithGoogle, signOutUser } = useAuth();
+  const { user, loading: authLoading, signInWithGoogle, signOutUser, deleteUserAccount } = useAuth();
   const [profileData, setProfileData] = useState<ProfileData>(generateInitialProfileData());
   const [links, setLinks] = useState<LinkData[]>(initialLinks);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isMounted, setIsMounted] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -58,7 +70,14 @@ export default function HomePage() {
   }, [theme, isMounted]);
 
   useEffect(() => {
-    if (!isMounted || !user || !db) return;
+    if (!isMounted || !user || !db) {
+      if (user === null && !authLoading) { // User is definitively logged out
+        setProfileData(generateInitialProfileData());
+        setLinks(initialLinks);
+      }
+      return;
+    }
+    
 
     const loadUserData = async () => {
       setFirestoreError(null);
@@ -67,7 +86,6 @@ export default function HomePage() {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          // Ensure loaded username is also a slug, or re-slugify if it's from an old format
           const loadedProfile = data.profile as ProfileData;
           setProfileData({
             ...loadedProfile,
@@ -84,27 +102,26 @@ export default function HomePage() {
       } catch (error: any) {
         console.error("Error loading user data from Firestore:", error);
         setFirestoreError(`Failed to load data: ${error.message}. Ensure Firestore is set up and rules allow reads.`);
-        toast({ title: "Load Error", description: "Could not load your data from the cloud.", variant: "destructive"});
+        toast({ title: "Load Error", description: `Could not load your data from the cloud. ${error.message}`, variant: "destructive"});
       }
     };
     loadUserData();
-  }, [user, isMounted, db]);
+  }, [user, isMounted, db, authLoading]); // Added authLoading
 
   const saveDataToFirestore = useCallback(async (newProfileData: ProfileData, newLinks: LinkData[]) => {
     if (!user || !db || !isMounted) return;
     setIsSaving(true);
     setFirestoreError(null);
     
-    // Ensure username in profile data is slugified before saving
     const profileToSave = {
       ...newProfileData,
-      username: slugifyUsername(newProfileData.username)
+      username: slugifyUsername(newProfileData.username) 
     };
 
     const userDocRef = doc(db, 'users', user.uid);
     try {
       await setDoc(userDocRef, { profile: profileToSave, links: newLinks }, { merge: true });
-      setProfileData(profileToSave); // Update local state with the potentially re-slugified username
+      setProfileData(profileToSave);
       toast({
         title: "Changes Saved!",
         description: "Your LinkHub profile and links are saved to the cloud.",
@@ -144,8 +161,7 @@ export default function HomePage() {
       return;
     }
 
-    // profileData.username should already be a valid slug
-    const shareUsername = profileData.username || 'myprofile'; 
+    const shareUsername = slugifyUsername(profileData.username || 'myprofile'); 
     const shareUrl = `${window.location.origin}/u/${shareUsername}`;
 
     try {
@@ -174,6 +190,17 @@ export default function HomePage() {
       });
       console.error('Share: Failed to copy link to clipboard:', err);
     }
+  };
+
+  const handleDeleteAccountConfirm = async () => {
+    if (!user) {
+      toast({ title: "Not Signed In", description: "Please sign in to delete your account.", variant: "destructive"});
+      return;
+    }
+    setIsDeleting(true);
+    await deleteUserAccount();
+    setIsDeleting(false);
+    // AuthContext will handle user state change and subsequent UI updates
   };
   
   if (!isMounted || authLoading) {
@@ -215,6 +242,29 @@ export default function HomePage() {
                 <Button variant="outline" onClick={signOutUser}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign Out
                 </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={isDeleting}>
+                      <Trash2 className={`mr-2 h-4 w-4 ${isDeleting ? 'animate-spin' : ''}`} />
+                      {isDeleting ? 'Deleting...' : 'Delete Account'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete your
+                        account and remove your data from our servers.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteAccountConfirm} disabled={isDeleting}>
+                        {isDeleting ? 'Deleting...' : 'Yes, delete account'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </>
             ) : (
               <Button onClick={signInWithGoogle}>
